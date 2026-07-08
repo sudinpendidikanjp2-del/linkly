@@ -8,8 +8,7 @@ import fs from "fs";
 
 dotenv.config();
 
-let prisma: any;
-let resetPrisma: any;
+import { prisma, resetPrisma } from "./src/prisma";
 import { GoogleGenAI, Type } from "@google/genai";
 
 const activeFilename = typeof import.meta !== "undefined" && import.meta.url
@@ -258,19 +257,11 @@ async function startServer() {
       }
     } catch (err) {
       console.error("Error during database sync execution:", err);
-    }
-
-    // Dynamically import prisma so that the correct compiled client in memory is loaded as early as possible
-    try {
-      const prismaModule = await import("./src/prisma.js");
-      prisma = prismaModule.prisma;
-      resetPrisma = prismaModule.resetPrisma;
+    } finally {
       if (resetPrisma) {
         resetPrisma();
       }
-      console.log("Prisma client dynamic import completed successfully.");
-    } catch (importError) {
-      console.error("Failed to dynamically import Prisma module:", importError);
+      console.log("Prisma client refreshed after database sync.");
     }
   })();
 
@@ -608,6 +599,21 @@ async function startServer() {
           treeLinks: JSON.parse(item.treeLinks)
         });
 
+      } else if (collection === "collections") {
+        const item = await prisma.collection.findUnique({
+          where: { id },
+          include: { links: true }
+        });
+        if (!item) return res.status(404).json({ error: "Collection not found" });
+        return res.json({
+          id: item.id,
+          userId: item.userId,
+          name: item.name,
+          description: item.description || "",
+          createdAt: item.createdAt.toISOString(),
+          linkIds: item.links.map((l: any) => l.id)
+        });
+
       } else if (collection === "settings") {
         if (id === "global") {
           const item = await prisma.globalSettings.findUnique({ where: { id: "default" } });
@@ -697,6 +703,7 @@ async function startServer() {
           treeGithub: data.treeGithub || null,
           treeVideoUrl: data.treeVideoUrl || null,
           treeButtonBgImage: data.treeButtonBgImage || null,
+          treeShowFolders: data.treeShowFolders !== false,
           updatedAt: new Date()
         };
 

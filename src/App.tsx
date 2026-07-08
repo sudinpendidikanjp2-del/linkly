@@ -833,13 +833,41 @@ export default function App() {
       const snapSettings = await getDoc(doc(db, "link_trees", targetUid));
       const treeData = snapSettings.exists() ? snapSettings.data() : null;
 
-      const qLinks = query(collection(db, "links"), where("userId", "==", targetUid));
-      const snapLinks = await getDocs(qLinks);
-      const linksData = snapLinks.docs.map(d => ({ id: d.id, ...d.data() })) as LinkData[];
+      let linksData: LinkData[] = [];
+      const treeLinks = treeData?.treeLinks || [];
+      if (Array.isArray(treeLinks) && treeLinks.length > 0) {
+        // Fetch only specific links configured for the link tree
+        const fetched = await Promise.all(
+          treeLinks.map(async (id: string) => {
+            const snap = await getDoc(doc(db, "links", id));
+            return snap.exists() ? { id, ...snap.data() } as LinkData : null;
+          })
+        );
+        linksData = fetched.filter(Boolean) as LinkData[];
+      } else {
+        // Fallback to fetch all of the user's links
+        const qLinks = query(collection(db, "links"), where("userId", "==", targetUid));
+        const snapLinks = await getDocs(qLinks);
+        linksData = snapLinks.docs.map(d => ({ id: d.id, ...d.data() })) as LinkData[];
+      }
 
-      const qCols = query(collection(db, "collections"), where("userId", "==", targetUid));
-      const snapCols = await getDocs(qCols);
-      const colsData = snapCols.docs.map(d => ({ id: d.id, ...d.data() }));
+      // Fetch only the collections that are referenced by the retrieved active links
+      const activeCollectionIds = Array.from(new Set(
+        linksData
+          .map(l => l.collectionId)
+          .filter((id): id is string => typeof id === "string" && id !== "")
+      ));
+
+      let colsData: any[] = [];
+      if (activeCollectionIds.length > 0) {
+        const fetchedCols = await Promise.all(
+          activeCollectionIds.map(async (id: string) => {
+            const snap = await getDoc(doc(db, "collections", id));
+            return snap.exists() ? { id, ...snap.data() } : null;
+          })
+        );
+        colsData = fetchedCols.filter(Boolean);
+      }
 
       return {
         treeData,
@@ -2959,35 +2987,37 @@ export default function App() {
               </div>
 
               {/* Folder Toggle Configuration */}
-              <div className={cn("p-6 rounded-3xl border transition-all space-y-4", isLightMode ? "bg-white border-zinc-200/80 shadow-sm" : "bg-zinc-900/50 border-zinc-800")}>
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1.5 text-left">
-                    <h3 className={cn("text-xs font-bold uppercase tracking-wider flex items-center gap-1.5", isLightMode ? "text-zinc-700" : "text-zinc-300")}>
-                      <Folder className="w-4 h-4 text-brand-500" />
-                      {lang === "id" ? "Grupkan Berdasarkan Folder / Koleksi" : "Group by Folder / Collection"}
-                    </h3>
-                    <p className={cn("text-[10px] leading-relaxed", isLightMode ? "text-zinc-500" : "text-zinc-400")}>
-                      {lang === "id" 
-                        ? "Aktifkan untuk mengelompokkan tautan ke dalam folder/koleksi di halaman Link Tree Anda." 
-                        : "Enable to group links inside their respective folders/collections on your Link Tree page."}
-                    </p>
+              {collections.length > 0 && (
+                <div className={cn("p-6 rounded-3xl border transition-all space-y-4", isLightMode ? "bg-white border-zinc-200/80 shadow-sm" : "bg-zinc-900/50 border-zinc-800")}>
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1.5 text-left">
+                      <h3 className={cn("text-xs font-bold uppercase tracking-wider flex items-center gap-1.5", isLightMode ? "text-zinc-700" : "text-zinc-300")}>
+                        <Folder className="w-4 h-4 text-brand-500" />
+                        {lang === "id" ? "Grupkan Berdasarkan Folder / Koleksi" : "Group by Folder / Collection"}
+                      </h3>
+                      <p className={cn("text-[10px] leading-relaxed", isLightMode ? "text-zinc-500" : "text-zinc-400")}>
+                        {lang === "id" 
+                          ? "Aktifkan untuk mengelompokkan tautan ke dalam folder/koleksi di halaman Link Tree Anda." 
+                          : "Enable to group links inside their respective folders/collections on your Link Tree page."}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setTreeShowFolders(!treeShowFolders)}
+                      className={cn(
+                        "w-10 h-5 rounded-full p-0.5 transition-colors relative duration-300 cursor-pointer shrink-0",
+                        treeShowFolders ? "bg-brand-500" : "bg-zinc-700"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-4 h-4 rounded-full transition-transform duration-300 transform",
+                        isLightMode ? "bg-white" : "bg-black",
+                        treeShowFolders ? "translate-x-5" : "translate-x-0"
+                      )} />
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setTreeShowFolders(!treeShowFolders)}
-                    className={cn(
-                      "w-10 h-5 rounded-full p-0.5 transition-colors relative duration-300 cursor-pointer shrink-0",
-                      treeShowFolders ? "bg-brand-500" : "bg-zinc-700"
-                    )}
-                  >
-                    <div className={cn(
-                      "w-4 h-4 rounded-full transition-transform duration-300 transform",
-                      isLightMode ? "bg-white" : "bg-black",
-                      treeShowFolders ? "translate-x-5" : "translate-x-0"
-                    )} />
-                  </button>
                 </div>
-              </div>
+              )}
 
               {/* Toggle links list on tree */}
               <div className={cn("p-6 rounded-3xl space-y-4 border transition-all", isLightMode ? "bg-white border-zinc-200/80 shadow-sm" : "bg-zinc-900/50 border-zinc-800")}>
@@ -2997,16 +3027,24 @@ export default function App() {
                 </div>
                 <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                   {links.map((link) => {
-                    const isChecked = treeLinks.includes(link.id);
+                    const isChecked = treeLinks.length === 0 || (treeLinks.includes(link.id) && !treeLinks.includes("__none__"));
                     return (
                       <div 
                         key={link.id}
                         onClick={() => {
-                          setTreeLinks(prev => 
-                            prev.includes(link.id)
-                              ? prev.filter(id => id !== link.id)
-                              : [...prev, link.id]
-                          );
+                          setTreeLinks(prev => {
+                            if (prev.length === 0) {
+                              const filtered = links.map(l => l.id).filter(id => id !== link.id);
+                              return filtered.length === 0 ? ["__none__"] : filtered;
+                            }
+                            if (prev.includes(link.id)) {
+                              const filtered = prev.filter(id => id !== link.id);
+                              return filtered.length === 0 ? ["__none__"] : filtered;
+                            } else {
+                              const added = [...prev, link.id];
+                              return added.filter(id => id !== "__none__");
+                            }
+                          });
                         }}
                         className={cn(
                           "flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer",
@@ -3119,9 +3157,10 @@ export default function App() {
                 {(() => {
                   const s = THEME_STYLES[treeTheme as keyof typeof THEME_STYLES] || THEME_STYLES.slate;
                   const chosenLinks = links.filter(l => {
-                    if (treeLinks.length > 0) {
+                    if (treeLinks.length > 0 && !treeLinks.includes("__none__")) {
                       return treeLinks.includes(l.id);
                     }
+                    if (treeLinks.includes("__none__")) return false;
                     return true;
                   });
                   return (

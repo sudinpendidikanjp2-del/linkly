@@ -92,6 +92,7 @@ model LinkTree {
   treeGithub        String?
   treeVideoUrl      String?
   treeButtonBgImage String?
+  treeShowFolders   Boolean  @default(true)
   updatedAt         DateTime @default(now())
 
   user User @relation(fields: [id], references: [id], onDelete: Cascade)

@@ -1,0 +1,103 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String   @id // Google user ID or email
+  email     String   @unique
+  name      String?
+  avatar    String?
+  createdAt DateTime @default(now())
+  
+  links       Link[]
+  collections Collection[]
+  clicks      Click[]
+  linkTree    LinkTree?
+}
+
+model Link {
+  id                 String   @id @default(uuid())
+  userId             String
+  originalUrl        String
+  shortSlug          String   @unique
+  customDomain       String?
+  clickCount         Int      @default(0)
+  qrScanCount        Int      @default(0)
+  collectionId       String?
+  createdAt          DateTime @default(now())
+  expiresAt          DateTime?
+  title              String
+  password           String?
+  landingEnabled     Boolean  @default(false)
+  landingDescription String?
+  landingAvatar      String?
+  isEnabled          Boolean  @default(true)
+  category           String?
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  collection Collection? @relation(fields: [collectionId], references: [id], onDelete: SetNull)
+  clicks     Click[]
+}
+
+model Click {
+  id         String   @id @default(uuid())
+  linkId     String
+  userId     String
+  timestamp  DateTime @default(now())
+  shortSlug  String
+  title      String
+  ip         String?
+  country    String?
+  region     String?
+  city       String?
+  device     String?
+  os         String?
+  browser    String?
+  referrer   String?
+  isQrScan   Boolean  @default(false)
+
+  link Link @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Collection {
+  id          String   @id @default(uuid())
+  userId      String
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  links Link[]
+}
+
+model LinkTree {
+  id                String   @id // userId
+  treeTitle         String
+  treeBio           String?
+  treeAvatar        String?
+  treeTheme         String   @default("slate")
+  treeLinks         String   @default("[]") // JSON string representation of string[]
+  treeBgImage       String?
+  treeButtonStyle   String   @default("classic")
+  treeInstagram     String?
+  treeTwitter       String?
+  treeLinkedIn      String?
+  treeYoutube       String?
+  treeGithub        String?
+  treeVideoUrl      String?
+  treeButtonBgImage String?
+  updatedAt         DateTime @default(now())
+
+  user User @relation(fields: [id], references: [id], onDelete: Cascade)
+}
+
+model GlobalSettings {
+  id                  String  @id @default("default")
+  registrationEnabled Boolean @default(true)
+}

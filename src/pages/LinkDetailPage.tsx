@@ -30,6 +30,8 @@ interface LinkDetailPageProps {
   setDetailEditSlug: (v: string) => void;
   detailEditExpiry: string;
   setDetailEditExpiry: (v: string) => void;
+  detailEditActivation: string;
+  setDetailEditActivation: (v: string) => void;
   detailEditPassword: string;
   setDetailEditPassword: (v: string) => void;
   detailCategory: string;
@@ -83,6 +85,8 @@ export default function LinkDetailPage({
   setDetailEditSlug,
   detailEditExpiry,
   setDetailEditExpiry,
+  detailEditActivation,
+  setDetailEditActivation,
   detailEditPassword,
   setDetailEditPassword,
   detailCategory,
@@ -222,7 +226,7 @@ export default function LinkDetailPage({
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1.5 text-left">
                   <label className={cn("text-xs font-bold", textMuted)}>{t("customSlug")}</label>
                   <input 
@@ -231,6 +235,17 @@ export default function LinkDetailPage({
                     onChange={(e) => setDetailEditSlug(e.target.value)}
                     placeholder={t("slugPlaceholder")}
                     className={cn("w-full rounded-xl py-3 px-4 focus:outline-none focus:ring-1 focus:ring-brand-500 text-xs font-mono font-bold text-brand-500 transition-colors", inputBg)}
+                  />
+                </div>
+                <div className="space-y-1.5 text-left">
+                  <label className={cn("text-xs font-bold", textMuted)}>
+                    {lang === "id" ? "Tanggal Aktivasi" : "Activation Date"}
+                  </label>
+                  <input 
+                    type="datetime-local"
+                    value={detailEditActivation}
+                    onChange={(e) => setDetailEditActivation(e.target.value)}
+                    className={cn("w-full rounded-xl py-3 px-4 focus:outline-none focus:ring-1 focus:ring-brand-500 text-xs transition-colors", inputBg)}
                   />
                 </div>
                 <div className="space-y-1.5 text-left">

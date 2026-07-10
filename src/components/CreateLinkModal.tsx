@@ -193,21 +193,17 @@ export default function CreateLinkModal({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Category select control */}
+                {/* Activation date limiter */}
                 <div className="space-y-2">
-                  <label className={cn("text-xs font-bold", textMuted)}>{t("categoryLabel")}</label>
-                  <select
-                    name="category"
-                    value={formCategory}
-                    onChange={(e) => setFormCategory(e.target.value)}
-                    className={cn("w-full rounded-xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-brand-500/50 font-medium transition-all text-sm", inputBg)}
-                  >
-                    {CATEGORY_OPTIONS.map((cat) => (
-                      <option key={cat.value} value={cat.value}>
-                        {lang === 'id' ? cat.labelIdText : cat.labelEn}
-                      </option>
-                    ))}
-                  </select>
+                  <label className={cn("text-xs font-bold", textMuted)}>
+                    {lang === "id" ? "Tanggal Aktivasi" : "Activation Date"}
+                  </label>
+                  <input 
+                    name="activatedAt"
+                    type="datetime-local" 
+                    defaultValue={editingLink?.activatedAt ? format(new Date(editingLink.activatedAt), "yyyy-MM-dd'T'HH:mm") : ""}
+                    className={cn("w-full rounded-xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-brand-500/50 font-medium transition-all", inputBg)}
+                  />
                 </div>
 
                 {/* Expiry date limiter */}

@@ -13,6 +13,7 @@ export interface LinkData {
   collectionId?: string;
   createdAt: string;
   expiresAt?: string;
+  activatedAt?: string;
   title: string;
   password?: string;
   landingEnabled?: boolean;

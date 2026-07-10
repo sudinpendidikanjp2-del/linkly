@@ -2,7 +2,7 @@ import React from "react";
 import { 
   List, Plus, Search, SlidersHorizontal, ArrowUpDown, CheckSquare, Square, 
   Eye, EyeOff, Lock, Layers, QrCode, Edit2, ExternalLink, Trash2, 
-  ChevronLeft, ChevronRight, Check, Copy
+  ChevronLeft, ChevronRight, Check, Copy, Clock
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { APP_THEME_CONFIGS, CATEGORY_OPTIONS, TRANSLATIONS } from "../constants";
@@ -289,6 +289,7 @@ export default function LinksListPage({
             <tbody className={cn("divide-y", tableBorder)}>
               {paginatedLinks.map((link) => {
                 const isExpired = link.expiresAt && new Date(link.expiresAt) < new Date();
+                const isScheduled = link.activatedAt && new Date(link.activatedAt) > new Date();
                 const shortUrl = `${window.location.origin}/${link.shortSlug}`;
                 const isSelected = selectedLinkIds.includes(link.id);
                 
@@ -348,6 +349,10 @@ export default function LinksListPage({
                         ) : link.isEnabled === false ? (
                           <span className={cn("p-1.5 rounded-xl transition-all font-semibold border", isLightMode ? "bg-zinc-100 text-zinc-500 border-zinc-200" : "bg-zinc-700/20 text-zinc-400 border-zinc-700/30")} title={t("disabled")}>
                             <EyeOff className="w-4 h-4" />
+                          </span>
+                        ) : isScheduled ? (
+                          <span className="p-1.5 rounded-xl bg-amber-500/10 text-amber-500 transition-all font-semibold" title={lang === "id" ? "Terjadwal (Belum Aktif)" : "Scheduled (Not Yet Active)"}>
+                            <Clock className="w-4 h-4" />
                           </span>
                         ) : (
                           <span className="p-1.5 rounded-xl bg-emerald-500/10 text-emerald-500 transition-all font-semibold" title={t("active")}>
@@ -418,6 +423,7 @@ export default function LinksListPage({
         <div className="block md:hidden divide-y divide-zinc-850">
           {paginatedLinks.map((link) => {
             const isExpired = link.expiresAt && new Date(link.expiresAt) < new Date();
+            const isScheduled = link.activatedAt && new Date(link.activatedAt) > new Date();
             const shortUrl = `${window.location.origin}/${link.shortSlug}`;
             const isSelected = selectedLinkIds.includes(link.id);
 
@@ -445,6 +451,10 @@ export default function LinksListPage({
                     ) : link.isEnabled === false ? (
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-zinc-700/20 text-zinc-400 border border-zinc-700/30">
                         {t("disabled")}
+                      </span>
+                    ) : isScheduled ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/10">
+                        {lang === "id" ? "Terjadwal" : "Scheduled"}
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/10 animate-pulse">

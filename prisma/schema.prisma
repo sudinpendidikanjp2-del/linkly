@@ -31,6 +31,7 @@ model Link {
   collectionId       String?
   createdAt          DateTime @default(now())
   expiresAt          DateTime?
+  activatedAt        DateTime?
   title              String
   password           String?
   landingEnabled     Boolean  @default(false)

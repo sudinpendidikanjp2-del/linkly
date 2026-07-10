@@ -286,9 +286,37 @@ async function startServer() {
     return aiClient;
   }
 
+  async function fetchPageTitle(url: string): Promise<string | null> {
+    try {
+      const response = await fetch(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9",
+        },
+        signal: AbortSignal.timeout(4000),
+      });
+      if (!response.ok) return null;
+      const html = await response.text();
+      const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+      if (titleMatch && titleMatch[1]) {
+        let title = titleMatch[1].trim();
+        title = title
+          .replace(/&amp;/g, "&")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'");
+        return title;
+      }
+    } catch (err) {
+      console.warn("Failed to fetch page title from URL directly:", err);
+    }
+    return null;
+  }
+
   // API endpoint to generate metadata using Gemini
   app.post("/api/generate-metadata", async (req, res) => {
-    const { originalUrl } = req.body;
+    const { originalUrl, currentTitle } = req.body;
 
     if (!originalUrl || typeof originalUrl !== "string") {
       return res.status(400).json({ error: "Original URL is required and must be a string." });
@@ -296,7 +324,15 @@ async function startServer() {
 
     try {
       const ai = getGeminiClient();
-      const prompt = `Analyze this URL and generate an appropriate metadata title and meta description: "${originalUrl}". Your response should be tailored specifically to the nature of this website.`;
+      let prompt = `Analyze this URL and generate an appropriate metadata title and meta description: "${originalUrl}". Your response should be tailored specifically to the nature of this website.`;
+
+      let detectedTitle = null;
+      if (!currentTitle || currentTitle.trim() === "") {
+        detectedTitle = await fetchPageTitle(originalUrl);
+        if (detectedTitle) {
+          prompt += `\n\nNote: A server-side fetcher automatically detected the following actual page title from the HTML: "${detectedTitle}". Please refine, clean up, and use this title as the primary reference for your generated metadata.`;
+        }
+      }
 
       const response = await ai.models.generateContent({
         model: "gemini-3.5-flash",
@@ -332,10 +368,45 @@ async function startServer() {
         description: result.description || ""
       });
     } catch (err: any) {
-      console.error("Gemini metadata generation failed:", err);
-      return res.status(500).json({
-        error: "Gagal membuat metadata otomatis menggunakan AI.",
-        details: err?.message || String(err)
+      console.warn("Gemini metadata generation failed, utilizing robust fallback mechanism:", err);
+
+      let fallbackTitle = "";
+      if (currentTitle && currentTitle.trim() !== "") {
+        fallbackTitle = currentTitle;
+      } else {
+        let detectedTitle = null;
+        try {
+          detectedTitle = await fetchPageTitle(originalUrl);
+        } catch (fetchErr) {
+          console.warn("Could not fetch page title as fallback:", fetchErr);
+        }
+
+        if (detectedTitle) {
+          fallbackTitle = detectedTitle;
+        } else {
+          try {
+            const parsed = new URL(originalUrl);
+            fallbackTitle = parsed.hostname.replace(/^www\./i, "");
+            fallbackTitle = fallbackTitle.charAt(0).toUpperCase() + fallbackTitle.slice(1);
+          } catch {
+            fallbackTitle = originalUrl;
+          }
+        }
+      }
+
+      let fallbackDescription = "";
+      try {
+        const parsed = new URL(originalUrl);
+        const domain = parsed.hostname.replace(/^www\./i, "");
+        fallbackDescription = `Tautan ke ${domain}`;
+      } catch {
+        fallbackDescription = `Tautan ke ${originalUrl}`;
+      }
+
+      return res.json({
+        title: fallbackTitle,
+        description: fallbackDescription,
+        isFallback: true
       });
     }
   });
@@ -422,6 +493,45 @@ async function startServer() {
         };
       }
 
+      // Check if user already exists
+      const existingUser = await prisma.user.findUnique({
+        where: { id: userData.id }
+      });
+
+      if (!existingUser) {
+        // New user registration!
+        // Check if registration is enabled
+        const globalSettings = await prisma.globalSettings.findUnique({
+          where: { id: "default" }
+        });
+        const registrationEnabled = globalSettings ? globalSettings.registrationEnabled : true;
+        
+        if (!registrationEnabled) {
+          return res.send(`
+            <!DOCTYPE html>
+            <html>
+              <head>
+                <title>Registrasi Dinonaktifkan</title>
+                <style>
+                  body { font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background-color: #09090b; color: #f4f4f5; text-align: center; }
+                  .container { max-width: 400px; padding: 2rem; border-radius: 1rem; border: 1px solid #27272a; background-color: #18181b; }
+                  h1 { font-size: 1.5rem; color: #ef4444; margin-bottom: 1rem; }
+                  p { color: #a1a1aa; font-size: 0.875rem; line-height: 1.5; }
+                  button { margin-top: 1.5rem; background-color: #f4f4f5; color: #09090b; border: none; padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: bold; cursor: pointer; }
+                </style>
+              </head>
+              <body>
+                <div class="container">
+                  <h1>Registrasi Gagal</h1>
+                  <p>Maaf, pendaftaran akun baru telah dinonaktifkan oleh administrator.</p>
+                  <button onclick="window.close()">Tutup Jendela</button>
+                </div>
+              </body>
+            </html>
+          `);
+        }
+      }
+
       // Upsert user in database using Prisma
       const dbUser = await prisma.user.upsert({
         where: { id: userData.id },
@@ -504,6 +614,268 @@ async function startServer() {
     return id;
   }
 
+  app.get("/api/links/registry", async (req, res) => {
+    try {
+      const rawUserId = req.query.userId as string;
+      const userId = await resolveUserId(rawUserId);
+      if (!userId) {
+        return res.status(400).json({ error: "Missing or invalid userId" });
+      }
+
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 10;
+      const search = (req.query.search as string || "").trim().toLowerCase();
+      const status = req.query.status as string || "all";
+      const category = req.query.category as string || "all";
+      const passwordOpt = req.query.password as string || "all";
+      const portal = req.query.portal as string || "all";
+      const minClicksStr = req.query.minClicks as string;
+      const minClicks = (minClicksStr && minClicksStr !== "undefined" && minClicksStr !== "null" && minClicksStr !== "") ? parseInt(minClicksStr) : null;
+      const sortField = req.query.sortField as string || "createdAt";
+      const sortOrder = (req.query.sortOrder as string || "desc").toLowerCase() as "asc" | "desc";
+
+      const where: any = { userId };
+
+      if (category !== "all") {
+        where.category = category;
+      }
+
+      if (passwordOpt === "protected") {
+        where.password = { not: "" };
+      } else if (passwordOpt === "none") {
+        where.OR = [
+          { password: "" },
+          { password: null }
+        ];
+      }
+
+      if (portal === "enabled") {
+        where.landingEnabled = true;
+      } else if (portal === "disabled") {
+        where.OR = [
+          { landingEnabled: false },
+          { landingEnabled: null }
+        ];
+      }
+
+      if (minClicks !== null && !isNaN(minClicks)) {
+        where.clickCount = { gte: minClicks };
+      }
+
+      if (search) {
+        where.AND = [
+          {
+            OR: [
+              { title: { contains: search } },
+              { originalUrl: { contains: search } },
+              { shortSlug: { contains: search } }
+            ]
+          }
+        ];
+      }
+
+      const now = new Date();
+      if (status === "active") {
+        where.OR = [
+          { expiresAt: null },
+          { expiresAt: { gt: now } }
+        ];
+      } else if (status === "expired") {
+        where.expiresAt = { lte: now };
+      }
+
+      const select = {
+        id: true,
+        title: true,
+        originalUrl: true,
+        shortSlug: true,
+        clickCount: true,
+        isEnabled: true,
+        password: true,
+        landingEnabled: true,
+        expiresAt: true,
+        createdAt: true,
+        category: true,
+      };
+
+      let orderBy: any = {};
+      if (sortField === "clickCount") {
+        orderBy = { clickCount: sortOrder };
+      } else if (sortField === "title") {
+        orderBy = { title: sortOrder };
+      } else if (sortField === "shortSlug") {
+        orderBy = { shortSlug: sortOrder };
+      } else {
+        orderBy = { createdAt: sortOrder };
+      }
+
+      const totalCount = await prisma.link.count({ where });
+      const links = await prisma.link.findMany({
+        where,
+        select,
+        orderBy,
+        skip: (page - 1) * limit,
+        take: limit,
+      });
+
+      const mappedLinks = links.map(link => {
+        const isExpired = link.expiresAt && new Date(link.expiresAt) < now;
+        return {
+          id: link.id,
+          title: link.title,
+          originalUrl: link.originalUrl,
+          shortSlug: link.shortSlug,
+          clickCount: link.clickCount,
+          isEnabled: link.isEnabled !== false,
+          isProtected: !!link.password,
+          isLandingEnabled: !!link.landingEnabled,
+          isExpired: !!isExpired,
+          createdAt: link.createdAt.toISOString(),
+          category: link.category || "general",
+        };
+      });
+
+      return res.json({
+        links: mappedLinks,
+        totalCount,
+        totalPages: Math.ceil(totalCount / limit) || 1,
+      });
+    } catch (err: any) {
+      console.error("Failed to fetch links registry:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/dashboard/stats", async (req, res) => {
+    try {
+      const rawUserId = req.query.userId as string;
+      const userId = await resolveUserId(rawUserId);
+      if (!userId) {
+        return res.status(400).json({ error: "Missing or invalid userId" });
+      }
+
+      const now = new Date();
+
+      const totalLinks = await prisma.link.count({
+        where: { userId }
+      });
+
+      const activeLinks = await prisma.link.count({
+        where: {
+          userId,
+          OR: [
+            { expiresAt: null },
+            { expiresAt: { gt: now } }
+          ]
+        }
+      });
+
+      const aggregateClicks = await prisma.link.aggregate({
+        where: { userId },
+        _sum: {
+          clickCount: true,
+          qrScanCount: true,
+        }
+      });
+      const totalClicks = aggregateClicks._sum.clickCount || 0;
+      const qrScanCount = aggregateClicks._sum.qrScanCount || 0;
+
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(now.getDate() - 6);
+      sevenDaysAgo.setHours(0, 0, 0, 0);
+
+      const clicksInLastWeek = await prisma.click.findMany({
+        where: {
+          userId,
+          timestamp: { gte: sevenDaysAgo }
+        },
+        select: {
+          timestamp: true
+        }
+      });
+
+      const clicksPerDay = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(now.getDate() - i);
+        
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const dateStr = `${yyyy}-${mm}-${dd}`;
+
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const label = `${dd} ${months[d.getMonth()]}`;
+
+        const count = clicksInLastWeek.filter(click => {
+          try {
+            const clickDate = new Date(click.timestamp);
+            const cY = clickDate.getFullYear();
+            const cM = String(clickDate.getMonth() + 1).padStart(2, '0');
+            const cD = String(clickDate.getDate()).padStart(2, '0');
+            return `${cY}-${cM}-${cD}` === dateStr;
+          } catch (e) {
+            return false;
+          }
+        }).length;
+
+        clicksPerDay.push({
+          name: label,
+          Clicks: count
+        });
+      }
+
+      const latestActivity = await prisma.click.findMany({
+        where: { userId },
+        orderBy: { timestamp: "desc" },
+        take: 5
+      });
+
+      const latestCreatedLinks = await prisma.link.findMany({
+        where: { userId },
+        orderBy: { createdAt: "desc" },
+        take: 5
+      });
+
+      return res.json({
+        totalLinks,
+        totalClicks,
+        activeLinks,
+        qrScanCount,
+        clicksPerDay,
+        latestActivity: latestActivity.map(c => ({
+          id: c.id,
+          linkId: c.linkId,
+          timestamp: c.timestamp.toISOString(),
+          ip: c.ip || "Unknown",
+          referrer: c.referrer || "Direct",
+          country: c.country || "Unknown",
+          city: c.city || "Unknown",
+          device: c.device || "Desktop",
+          browser: c.browser || "Unknown",
+          os: c.os || "Unknown",
+        })),
+        latestCreatedLinks: latestCreatedLinks.map(l => ({
+          id: l.id,
+          title: l.title,
+          originalUrl: l.originalUrl,
+          shortSlug: l.shortSlug,
+          clickCount: l.clickCount,
+          qrScanCount: l.qrScanCount || 0,
+          isEnabled: l.isEnabled !== false,
+          isProtected: !!l.password,
+          isLandingEnabled: !!l.landingEnabled,
+          expiresAt: l.expiresAt ? l.expiresAt.toISOString() : null,
+          activatedAt: l.activatedAt ? l.activatedAt.toISOString() : null,
+          createdAt: l.createdAt.toISOString()
+        }))
+      });
+    } catch (err: any) {
+      console.error("Failed to fetch dashboard stats:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/documents/:collection", async (req, res) => {
     const { collection } = req.params;
     const filters: any = req.query;
@@ -558,8 +930,6 @@ async function startServer() {
 
         return res.json(mapped);
 
-      } else if (collection === "test") {
-        return res.json([{ id: "connection", status: "connected" }]);
       } else {
         return res.status(404).json({ error: `Collection ${collection} not found` });
       }
@@ -644,6 +1014,20 @@ async function startServer() {
 
     try {
       if (collection === "users") {
+        const existingUser = await prisma.user.findUnique({
+          where: { id }
+        });
+
+        if (!existingUser) {
+          const globalSettings = await prisma.globalSettings.findUnique({
+            where: { id: "default" }
+          });
+          const registrationEnabled = globalSettings ? globalSettings.registrationEnabled : true;
+          if (!registrationEnabled) {
+            return res.status(403).json({ error: "REGISTRATION_DISABLED", message: "Pendaftaran akun baru dinonaktifkan." });
+          }
+        }
+
         const item = await prisma.user.upsert({
           where: { id },
           update: {
@@ -677,7 +1061,12 @@ async function startServer() {
           isEnabled: data.isEnabled !== false,
           category: data.category || "general"
         };
-        if (data.expiresAt) payload.expiresAt = new Date(data.expiresAt);
+        if (data.expiresAt !== undefined) {
+          payload.expiresAt = data.expiresAt ? new Date(data.expiresAt) : null;
+        }
+        if (data.activatedAt !== undefined) {
+          payload.activatedAt = data.activatedAt ? new Date(data.activatedAt) : null;
+        }
         if (data.createdAt) payload.createdAt = new Date(data.createdAt);
 
         const item = await prisma.link.upsert({
@@ -783,6 +1172,7 @@ async function startServer() {
         if (data.category !== undefined) updateData.category = data.category;
         if (data.collectionId !== undefined) updateData.collectionId = data.collectionId || null;
         if (data.expiresAt !== undefined) updateData.expiresAt = data.expiresAt ? new Date(data.expiresAt) : null;
+        if (data.activatedAt !== undefined) updateData.activatedAt = data.activatedAt ? new Date(data.activatedAt) : null;
 
         if (data.clickCount && data.clickCount.__increment) {
           updateData.clickCount = { increment: data.clickCount.__increment };
@@ -836,6 +1226,342 @@ async function startServer() {
       res.status(500).json({ error: err.message });
     }
   });
+
+  function getYouTubeEmbedUrl(url: string): string | null {
+    if (!url) return null;
+    const cleanUrl = url.trim();
+    let regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    let match = cleanUrl.match(regExp);
+    if (match && match[2] && match[2].length === 11) {
+      return `https://www.youtube.com/embed/${match[2]}`;
+    }
+    regExp = /\/shorts\/([a-zA-Z0-9_-]{11})/;
+    match = cleanUrl.match(regExp);
+    if (match && match[1]) {
+      return `https://www.youtube.com/embed/${match[1]}`;
+    }
+    return null;
+  }
+
+  async function servePublicBioTree(req: any, res: any) {
+    const { id } = req.params;
+    try {
+      const userId = await resolveUserId(id);
+      if (!userId) {
+        return res.status(404).send("Profil tidak ditemukan.");
+      }
+
+      // Fetch User settings and data
+      const userObj = await prisma.user.findUnique({
+        where: { id: userId }
+      });
+
+      const linkTree = await prisma.linkTree.findUnique({
+        where: { id: userId }
+      });
+
+      const links = await prisma.link.findMany({
+        where: { userId, isEnabled: true },
+        orderBy: { createdAt: "desc" }
+      });
+
+      const collections = await prisma.collection.findMany({
+        where: { userId },
+        include: { links: true },
+        orderBy: { createdAt: "desc" }
+      });
+
+      // Filter active links
+      let activeLinks = links;
+      const treeLinks = linkTree?.treeLinks ? JSON.parse(linkTree.treeLinks) : [];
+      if (Array.isArray(treeLinks) && treeLinks.length > 0 && !treeLinks.includes("__none__")) {
+        activeLinks = links.filter((l: any) => treeLinks.includes(l.id));
+      } else if (Array.isArray(treeLinks) && treeLinks.includes("__none__")) {
+        activeLinks = [];
+      }
+
+      // Filter non-expired links
+      activeLinks = activeLinks.filter((l: any) => {
+        if (l.expiresAt && new Date(l.expiresAt) < new Date()) return false;
+        return true;
+      });
+
+      // Map theme
+      const themeName = linkTree?.treeTheme || "slate";
+      const THEMES: Record<string, any> = {
+        slate: {
+          bg: "background: linear-gradient(to bottom, #09090b, #18181b, #000000);",
+          buttonBg: "background-color: #27272a; border-color: rgba(63, 63, 70, 0.5);",
+          buttonText: "color: #f4f4f5; font-weight: 600;",
+          accentColor: "#fb923c"
+        },
+        monochrome: {
+          bg: "background: linear-gradient(to bottom, #000000, #09090b, #18181b);",
+          buttonBg: "background-color: #18181b; border: 1px solid #ffffff;",
+          buttonText: "color: #ffffff; font-weight: 800;",
+          accentColor: "#ffffff"
+        },
+        lightMonochrome: {
+          bg: "background: linear-gradient(to bottom, #ffffff, #f4f4f5, #e4e4e7);",
+          buttonBg: "background-color: #ffffff; border: 2px solid #000000;",
+          buttonText: "color: #000000; font-weight: 800;",
+          accentColor: "#000000"
+        },
+        lightSlate: {
+          bg: "background: linear-gradient(to bottom, #f8fafc, #f4f4f5, #ffffff);",
+          buttonBg: "background-color: #ffffff; border: 1px solid #e4e4e7;",
+          buttonText: "color: #18181b; font-weight: 600;",
+          accentColor: "#ea580c"
+        },
+        sunset: {
+          bg: "background: linear-gradient(to bottom right, #1e1b4b, #581c87, #2e1065);",
+          buttonBg: "background-color: rgba(88, 28, 135, 0.3); border: 1px solid rgba(251, 146, 60, 0.2);",
+          buttonText: "color: #f5f3ff; font-weight: 600;",
+          accentColor: "#fb923c"
+        },
+        lightSunset: {
+          bg: "background: linear-gradient(to bottom right, #fffbeb, #fff1f2, #fffbeb);",
+          buttonBg: "background-color: #ffffff; border: 1px solid rgba(251, 146, 60, 0.5);",
+          buttonText: "color: #451a03; font-weight: 600;",
+          accentColor: "#fb923c"
+        },
+        forest: {
+          bg: "background: linear-gradient(to bottom right, #1c1917, #022c22, #09090b);",
+          buttonBg: "background-color: rgba(2, 44, 34, 0.3); border: 1px solid rgba(6, 95, 70, 0.3);",
+          buttonText: "color: #ecfdf5; font-weight: 600;",
+          accentColor: "#34d399"
+        },
+        lightForest: {
+          bg: "background: linear-gradient(to bottom right, #ecfdf5, #fafaf9, #ffffff);",
+          buttonBg: "background-color: #ffffff; border: 1px solid #d1fae5;",
+          buttonText: "color: #064e3b; font-weight: 600;",
+          accentColor: "#059669"
+        },
+        royal: {
+          bg: "background: linear-gradient(to bottom, #0f172a, #172554, #000000);",
+          buttonBg: "background-color: rgba(23, 37, 84, 0.35); border: 1px solid rgba(30, 58, 138, 0.3);",
+          buttonText: "color: #eff6ff; font-weight: 600;",
+          accentColor: "#60a5fa"
+        }
+      };
+
+      const selectedTheme = THEMES[themeName] || THEMES.slate;
+
+      // Handle custom backgrounds
+      let bodyBgStyle = selectedTheme.bg;
+      if (linkTree?.treeBgImage) {
+        bodyBgStyle = `background-image: url(${linkTree.treeBgImage}); background-size: cover; background-position: center; background-repeat: no-repeat; background-attachment: fixed;`;
+      }
+
+      // Button customization
+      const btnStyleKey = linkTree?.treeButtonStyle || "classic";
+      let btnRadiusClass = "rounded-2xl";
+      let customBtnBgStyle = selectedTheme.buttonBg;
+      let fontClass = "font-semibold";
+
+      if (btnStyleKey === "pill") {
+        btnRadiusClass = "rounded-full";
+      } else if (btnStyleKey === "outline") {
+        btnRadiusClass = "rounded-full";
+        customBtnBgStyle = `background-color: transparent !important; border: 1.5px solid ${selectedTheme.accentColor} !important; color: ${selectedTheme.accentColor} !important;`;
+      } else if (btnStyleKey === "brutalist") {
+        btnRadiusClass = "rounded-none";
+        customBtnBgStyle = `background-color: ${selectedTheme.accentColor} !important; border: 2px solid #09090b !important; color: #09090b !important; box-shadow: 4px 4px 0px 0px rgba(0,0,0,1);`;
+        fontClass = "font-black tracking-wide";
+      } else if (btnStyleKey === "glass") {
+        btnRadiusClass = "rounded-2xl";
+        customBtnBgStyle = "background-color: rgba(255, 255, 255, 0.1) !important; border: 1px solid rgba(255, 255, 255, 0.2) !important; backdrop-filter: blur(12px); color: #ffffff !important;";
+      } else if (btnStyleKey === "soft-hover") {
+        btnRadiusClass = "rounded-xl";
+        customBtnBgStyle = `background-color: rgba(251, 146, 60, 0.1) !important; color: ${selectedTheme.accentColor} !important; border: none !important;`;
+      }
+
+      if (linkTree?.treeButtonBgImage) {
+        customBtnBgStyle = `background-image: url(${linkTree.treeButtonBgImage}); background-size: cover; background-position: center; color: #ffffff !important; font-weight: 900 !important; text-shadow: 0px 1.5px 2.5px rgba(0,0,0,0.85);`;
+        fontClass = "font-black tracking-wide";
+      }
+
+      // Social Icons
+      let socialIconsHtml = "";
+      const socialPlatforms = [
+        { key: "treeInstagram", url: "https://instagram.com/", label: "Instagram", svg: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>` },
+        { key: "treeTwitter", url: "https://twitter.com/", label: "Twitter", svg: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"></svg>` },
+        { key: "treeLinkedIn", url: "https://linkedin.com/in/", label: "LinkedIn", svg: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg>` },
+        { key: "treeYoutube", url: "https://youtube.com/@", label: "YouTube", svg: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"></path><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"></polygon></svg>` },
+        { key: "treeGithub", url: "https://github.com/", label: "GitHub", svg: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>` }
+      ];
+
+      for (const platform of socialPlatforms) {
+        const val = linkTree ? (linkTree as any)[platform.key] : "";
+        if (val) {
+          const finalUrl = val.startsWith("http") ? val : `${platform.url}${val.replace("@", "")}`;
+          socialIconsHtml += `
+            <a href="${finalUrl}" target="_blank" rel="noreferrer" class="text-zinc-400 hover:scale-110 transition-all p-2 bg-zinc-900/45 border border-zinc-800 rounded-full w-10 h-10 flex items-center justify-center hover:border-brand-500/20">
+              ${platform.svg}
+            </a>
+          `;
+        }
+      }
+
+      // Embedded Video
+      let videoHtml = "";
+      if (linkTree?.treeVideoUrl) {
+        const embedUrl = getYouTubeEmbedUrl(linkTree.treeVideoUrl);
+        if (embedUrl) {
+          videoHtml = `
+            <div class="w-full my-4 rounded-3xl overflow-hidden border border-zinc-500/10 shadow-lg bg-zinc-950/45 aspect-video hover:border-zinc-500/25 transition-all">
+              <iframe src="${embedUrl}" class="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+            </div>
+          `;
+        }
+      }
+
+      // Folders/Collections rendering and links rendering
+      let linksListHtml = "";
+      const showFolders = linkTree?.treeShowFolders !== false;
+
+      // Track link IDs already shown in folders to avoid duplicate rendering if flat list is rendered
+      const folderLinkIds = new Set<string>();
+
+      if (showFolders) {
+        for (const col of collections) {
+          const colLinkIds = col.links ? col.links.map((l: any) => l.id) : [];
+          const linksInFolder = activeLinks.filter((l: any) => colLinkIds.includes(l.id));
+          if (linksInFolder.length > 0) {
+            colLinkIds.forEach((id: string) => folderLinkIds.add(id));
+
+            let folderLinksHtml = "";
+            for (const link of linksInFolder) {
+              const shortUrl = `/${link.shortSlug}`;
+              folderLinksHtml += `
+                <a href="${shortUrl}" class="block w-full py-3.5 px-5 transition-all duration-300 transform hover:-translate-y-0.5 flex justify-between items-center bg-opacity-80 backdrop-blur-sm ${btnRadiusClass}" style="${customBtnBgStyle}">
+                  <span class="w-4"></span>
+                  <span class="${fontClass}">${link.title || link.shortSlug}</span>
+                  <svg class="w-4 h-4 opacity-70 hover:opacity-100" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polygon><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                </a>
+              `;
+            }
+
+            linksListHtml += `
+              <div class="w-full space-y-2">
+                <button onclick="toggleFolder('${col.id}')" class="w-full py-4 px-6 transition-all duration-300 flex justify-between items-center group relative overflow-hidden cursor-pointer border ${btnRadiusClass}" style="${customBtnBgStyle}">
+                  <div class="flex items-center gap-3">
+                    <svg id="icon-closed-${col.id}" class="w-5 h-5 text-zinc-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    <svg id="icon-open-${col.id}" class="w-5 h-5 text-zinc-400 shrink-0 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><path d="M2 10h20"></path></svg>
+                    <span class="${fontClass}">${col.name}</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-[10px] uppercase tracking-wider opacity-60 font-bold shrink-0">${linksInFolder.length} tautan</span>
+                    <svg id="arrow-${col.id}" class="w-4 h-4 transition-all duration-300 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                  </div>
+                </button>
+                <div id="folder-${col.id}" class="w-full pl-4 pr-1 space-y-2 border-l-2 border-dashed border-zinc-500/30 overflow-hidden hidden">
+                  ${folderLinksHtml}
+                </div>
+              </div>
+            `;
+          }
+        }
+      }
+
+      // Render Flat links
+      const flatLinks = activeLinks.filter((l: any) => !folderLinkIds.has(l.id));
+      for (const link of flatLinks) {
+        const shortUrl = `/${link.shortSlug}`;
+        linksListHtml += `
+          <a href="${shortUrl}" class="block w-full py-4 px-6 transition-all duration-300 transform hover:-translate-y-0.5 flex justify-between items-center border ${btnRadiusClass}" style="${customBtnBgStyle}">
+            <span class="w-4"></span>
+            <span class="${fontClass}">${link.title || link.shortSlug}</span>
+            <svg class="w-4 h-4 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polygon><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+          </a>
+        `;
+      }
+
+      const avatarHtml = linkTree?.treeAvatar 
+        ? `<img src="${linkTree.treeAvatar}" alt="${linkTree.treeTitle || "Bio"}" class="w-full h-full object-cover rounded-full" />`
+        : `<svg class="w-8 h-8 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>`;
+
+      const title = linkTree?.treeTitle || userObj?.name || "Tautan Saya";
+      const bio = linkTree?.treeBio || "Selamat datang di Link Tree kustom saya!";
+
+      const responseHtml = `
+        <!DOCTYPE html>
+        <html lang="id">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>${title}</title>
+            <script src="https://cdn.tailwindcss.com"></script>
+            <style>
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+                margin: 0;
+                padding: 0;
+                ${bodyBgStyle}
+              }
+              .theme-accent {
+                color: ${selectedTheme.accentColor};
+              }
+            </style>
+          </head>
+          <body class="min-h-screen py-16 px-4 flex flex-col items-center justify-start text-zinc-100">
+            <div class="w-full max-w-md flex flex-col items-center text-center space-y-8">
+              <!-- Avatar Frame -->
+              <div class="w-24 h-24 rounded-full border border-zinc-500/25 p-1 bg-zinc-900/60 shadow-xl overflow-hidden flex items-center justify-center">
+                ${avatarHtml}
+              </div>
+
+              <!-- User Bio -->
+              <div class="space-y-2">
+                <h1 class="text-2xl font-extrabold tracking-tight" style="color: ${selectedTheme.accentColor || '#ffffff'};">${title}</h1>
+                <p class="text-xs opacity-70 font-mono tracking-wide max-w-xs mx-auto leading-relaxed">${bio}</p>
+              </div>
+
+              <!-- Social Icons -->
+              <div class="flex items-center justify-center gap-3.5 py-1.5 flex-wrap">
+                ${socialIconsHtml}
+              </div>
+
+              <!-- Embedded Video -->
+              ${videoHtml}
+
+              <!-- Render Links List -->
+              <div class="w-full space-y-4">
+                ${linksListHtml}
+              </div>
+            </div>
+
+            <script>
+              function toggleFolder(colId) {
+                const folderEl = document.getElementById('folder-' + colId);
+                const arrowEl = document.getElementById('arrow-' + colId);
+                const iconOpen = document.getElementById('icon-open-' + colId);
+                const iconClosed = document.getElementById('icon-closed-' + colId);
+                
+                if (folderEl.classList.contains('hidden')) {
+                  folderEl.classList.remove('hidden');
+                  if (arrowEl) arrowEl.style.transform = 'rotate(180deg)';
+                  if (iconOpen) iconOpen.classList.remove('hidden');
+                  if (iconClosed) iconClosed.classList.add('hidden');
+                } else {
+                  folderEl.classList.add('hidden');
+                  if (arrowEl) arrowEl.style.transform = 'rotate(0deg)';
+                  if (iconOpen) iconOpen.classList.add('hidden');
+                  if (iconClosed) iconClosed.classList.remove('hidden');
+                }
+              }
+            </script>
+          </body>
+        </html>
+      `;
+
+      res.setHeader("Content-Type", "text/html");
+      return res.send(responseHtml);
+    } catch (err: any) {
+      console.error("servePublicBioTree failed:", err);
+      return res.status(500).send("Internal Server Error");
+    }
+  }
 
   // Redirection Logic using Prisma
   async function handleRedirection(req: any, res: any, next?: any) {
@@ -905,6 +1631,48 @@ async function startServer() {
             </body>
           </html>
         `);
+      }
+
+      if (linkData.activatedAt) {
+        const activatedAt = new Date(linkData.activatedAt);
+        if (activatedAt > new Date()) {
+          const options: Intl.DateTimeFormatOptions = { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric', 
+            hour: '2-digit', 
+            minute: '2-digit' 
+          };
+          const formattedDate = activatedAt.toLocaleDateString('id-ID', options);
+          return res.status(403).send(`
+            <!DOCTYPE html>
+            <html>
+              <head>
+                <meta charset="UTF-8">
+                <title>Tautan Belum Aktif - Linkly</title>
+                <script src="https://cdn.tailwindcss.com"></script>
+                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+                <style>
+                  body { font-family: 'Inter', sans-serif; background-color: #0a0a0a; color: #f4f4f5; }
+                </style>
+              </head>
+              <body class="min-h-screen flex items-center justify-center p-4">
+                <div class="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-3xl p-8 shadow-2xl text-center space-y-6">
+                  <div class="inline-flex items-center justify-center w-14 h-14 bg-zinc-950 text-blue-500 rounded-2xl mb-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+                  </div>
+                  <div class="space-y-2">
+                    <h1 class="text-2xl font-bold tracking-tight">Tautan Belum Aktif</h1>
+                    <p class="text-sm text-zinc-400">Tautan ini dikonfigurasi untuk mulai aktif pada:</p>
+                    <p class="text-md font-semibold text-blue-400 bg-zinc-950/50 py-2 px-4 rounded-xl border border-zinc-800/50 inline-block">${formattedDate}</p>
+                  </div>
+                  <p class="text-xs text-zinc-600">Didukung oleh <span class="text-zinc-500 font-semibold">Linkly</span></p>
+                </div>
+              </body>
+            </html>
+          `);
+        }
       }
 
       if (linkData.expiresAt) {
@@ -1084,6 +1852,11 @@ async function startServer() {
       res.status(500).send("Internal Server Error");
     }
   }
+
+  // Public Bio Linktree server-side rendering
+  app.get("/tree/:id", servePublicBioTree);
+  app.get("/lt/:id", servePublicBioTree);
+  app.get("/t/:id", servePublicBioTree);
 
   // Redirection routes
   app.get("/r/:slug", handleRedirection);

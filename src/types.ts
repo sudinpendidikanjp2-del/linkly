@@ -81,3 +81,24 @@ export interface FirestoreErrorInfo {
     }[];
   };
 }
+
+export interface BulkImportItem {
+  originalUrl: string;
+  shortSlug?: string;
+  title?: string;
+  category?: string;
+  collectionId?: string;
+}
+
+export interface BulkImportSkippedItem {
+  originalUrl: string;
+  shortSlug: string;
+  title?: string;
+  reason: string;
+}
+
+export interface BulkImportResult {
+  importedCount: number;
+  skippedCount: number;
+  skipped: BulkImportSkippedItem[];
+}

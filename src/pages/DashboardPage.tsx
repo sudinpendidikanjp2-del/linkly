@@ -3,7 +3,7 @@ import {
   Sparkles, Plus, Trash2, Link2, MousePointer2, Clock, QrCode, 
   Activity, Globe, Laptop, Smartphone, Tablet, Shield, Compass, 
   Search, ArrowUpDown, CheckSquare, Square, Eye, EyeOff, Edit2, 
-  ExternalLink, Check, Copy, User as UserIcon, Layers, Lock
+  ExternalLink, Check, Copy, User as UserIcon, Layers, Lock, Upload
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Line } from "recharts";
@@ -55,6 +55,7 @@ interface DashboardPageProps {
   allClicks: ClickEvent[];
   isLightMode: boolean;
   appTheme: keyof typeof APP_THEME_CONFIGS;
+  setIsBulkImportOpen: (open: boolean) => void;
 }
 
 export default function DashboardPage({
@@ -87,6 +88,7 @@ export default function DashboardPage({
   allClicks,
   isLightMode,
   appTheme,
+  setIsBulkImportOpen,
 }: DashboardPageProps) {
   const curT = APP_THEME_CONFIGS[appTheme];
   const t = (key: keyof typeof TRANSLATIONS.id) => {
@@ -122,6 +124,18 @@ export default function DashboardPage({
               {t("bulkDelete")} ({selectedLinkIds.length})
             </button>
           )}
+          <button
+            onClick={() => setIsBulkImportOpen(true)}
+            className={cn(
+              "font-bold px-4 py-3 rounded-xl border transition-all flex items-center gap-2 text-sm cursor-pointer shadow-sm",
+              isLightMode 
+                ? "bg-zinc-100 hover:bg-zinc-200 text-zinc-900 border-zinc-250" 
+                : "bg-zinc-800 hover:bg-zinc-700 text-white border-zinc-700"
+            )}
+          >
+            <Upload className="w-4 h-4 text-brand-500" />
+            {lang === "id" ? "Impor Massal" : "Bulk Import"}
+          </button>
           <button 
             onClick={() => { setEditingLink(null); setIsModalOpen(true); }}
             className={cn("text-black font-extrabold px-6 py-3 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer", curT.bg, curT.hoverBg, curT.shadowAccent)}

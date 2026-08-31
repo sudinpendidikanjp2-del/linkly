@@ -10,7 +10,7 @@ import { format } from "date-fns";
 import { nanoid } from "nanoid";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { LinkData, ClickEvent, LinkCollection, GlobalSettings, OperationType, FirestoreErrorInfo } from "./types";
+import { LinkData, ClickEvent, LinkCollection, GlobalSettings, OperationType, FirestoreErrorInfo, BulkImportItem, BulkImportSkippedItem, BulkImportResult } from "./types";
 import { TRANSLATIONS, APP_THEME_CONFIGS, THEME_PALETTES, THEME_STYLES } from "./constants";
 
 // Import modular pages
@@ -24,6 +24,8 @@ import LinkTreePage from "./pages/LinkTreePage";
 
 // Import modular components
 import CreateLinkModal from "./components/CreateLinkModal";
+import BulkImportModal from "./components/BulkImportModal";
+import DuplicateSlugAlertModal from "./components/DuplicateSlugAlertModal";
 
 // Import services for business logic abstraction (Phase 1)
 import { AuthService } from "./services/auth.service";
@@ -264,6 +266,56 @@ export default function App() {
     handleSaveTree,
     getYouTubeEmbedUrl,
   } = useTree(user, currentTab, isLinkTreePath);
+
+  // Bulk Import States & Handler
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
+  const [isDuplicateAlertOpen, setIsDuplicateAlertOpen] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [skippedItems, setSkippedItems] = useState<BulkImportSkippedItem[]>([]);
+  const [importedCount, setImportedCount] = useState(0);
+
+  const handleBulkImport = async (items: BulkImportItem[]) => {
+    if (!user) return;
+    setIsImporting(true);
+    try {
+      const result = await LinkService.bulkImportLinks(user.uid, items);
+      setImportedCount(result.importedCount);
+      setSkippedItems(result.skipped);
+      
+      // Invalidate queries so that the link list and dashboard update
+      await queryClient.invalidateQueries({ queryKey: ["links_registry"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard_stats"] });
+      await queryClient.invalidateQueries({ queryKey: ["links", user.uid] });
+
+      setIsBulkImportOpen(false);
+
+      if (result.skippedCount > 0) {
+        setIsDuplicateAlertOpen(true);
+        showToast(
+          lang === "id"
+            ? `Berhasil mengimpor ${result.importedCount} tautan. ${result.skippedCount} dilewati.`
+            : `Successfully imported ${result.importedCount} links. ${result.skippedCount} skipped.`,
+          "error"
+        );
+      } else {
+        showToast(
+          lang === "id"
+            ? `Berhasil mengimpor ${result.importedCount} tautan baru!`
+            : `Successfully imported ${result.importedCount} new links!`,
+          "success"
+        );
+      }
+    } catch (error: any) {
+      showToast(
+        lang === "id"
+          ? "Gagal melakukan impor massal."
+          : "Failed to perform bulk import.",
+        "error"
+      );
+    } finally {
+      setIsImporting(false);
+    }
+  };
 
   // Synchronize QR code default foreground color when app theme moves
   useEffect(() => {
@@ -1452,6 +1504,7 @@ export default function App() {
             setCurrentTab={(tab: any) => setCurrentTab(tab)}
             isLightMode={isLightMode}
             appTheme={appTheme}
+            setIsBulkImportOpen={setIsBulkImportOpen}
           />
         ) : currentTab === "link-detail" ? (
           <LinkDetailPage
@@ -1548,6 +1601,7 @@ export default function App() {
             allClicks={allClicks}
             isLightMode={isLightMode}
             appTheme={appTheme}
+            setIsBulkImportOpen={setIsBulkImportOpen}
           />
         )}
       </main>
@@ -2051,6 +2105,37 @@ export default function App() {
           </motion.div>
         </div>
       )}
+
+      {/* Bulk Import Modal */}
+      <AnimatePresence>
+        {isBulkImportOpen && (
+          <BulkImportModal
+            isOpen={isBulkImportOpen}
+            onClose={() => setIsBulkImportOpen(false)}
+            lang={lang}
+            collections={collections}
+            onBulkImport={handleBulkImport}
+            isLightMode={isLightMode}
+            appTheme={appTheme}
+            isImporting={isImporting}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Duplicate Slug Conflict Reporting Modal */}
+      <AnimatePresence>
+        {isDuplicateAlertOpen && (
+          <DuplicateSlugAlertModal
+            isOpen={isDuplicateAlertOpen}
+            onClose={() => setIsDuplicateAlertOpen(false)}
+            skippedItems={skippedItems}
+            importedCount={importedCount}
+            lang={lang}
+            isLightMode={isLightMode}
+            appTheme={appTheme}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Floating Custom Toast notifications */}
       <AnimatePresence>

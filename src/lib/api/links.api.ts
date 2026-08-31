@@ -1,4 +1,4 @@
-import { LinkData } from "../../types";
+import { LinkData, BulkImportItem, BulkImportResult } from "../../types";
 
 export class LinksApi {
   static async getLinksRegistry(params: URLSearchParams): Promise<{ links: LinkData[]; totalCount: number; totalPages: number }> {
@@ -18,6 +18,21 @@ export class LinksApi {
     const data = await response.json();
     if (!response.ok) {
       throw new Error(data.error || data.details || "Gagal menghasilkan metadata.");
+    }
+    return data;
+  }
+
+  static async bulkImportLinks(userId: string, items: BulkImportItem[]): Promise<BulkImportResult> {
+    const response = await fetch("/api/links/bulk-import", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ userId, items })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Gagal melakukan impor massal.");
     }
     return data;
   }

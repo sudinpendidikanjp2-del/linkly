@@ -411,6 +411,125 @@ async function startServer() {
     }
   });
 
+  // Bulk Import Endpoint with Slug Collision skip-logic
+  app.post("/api/links/bulk-import", async (req, res) => {
+    const { userId, items } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId is required." });
+    }
+    if (!items || !Array.isArray(items)) {
+      return res.status(400).json({ error: "items array is required." });
+    }
+
+    const imported: any[] = [];
+    const skipped: any[] = [];
+
+    for (const item of items) {
+      let { originalUrl, shortSlug, title, category, collectionId } = item;
+
+      if (!originalUrl || typeof originalUrl !== "string" || originalUrl.trim() === "") {
+        skipped.push({
+          originalUrl: originalUrl || "",
+          shortSlug: shortSlug || "",
+          title: title || "",
+          reason: "URL tidak boleh kosong / URL cannot be empty"
+        });
+        continue;
+      }
+
+      // Quick format URL verification
+      let formattedUrl = originalUrl.trim();
+      if (!/^https?:\/\//i.test(formattedUrl)) {
+        formattedUrl = `https://${formattedUrl}`;
+      }
+
+      // Check URL parse validity
+      try {
+        new URL(formattedUrl);
+      } catch {
+        skipped.push({
+          originalUrl: originalUrl,
+          shortSlug: shortSlug || "",
+          title: title || "",
+          reason: "Format URL tidak valid / Invalid URL format"
+        });
+        continue;
+      }
+
+      // Normalize shortSlug or generate a new one
+      let normalizedSlug = "";
+      if (shortSlug && typeof shortSlug === "string" && shortSlug.trim() !== "") {
+        // Only alphanumeric, hyphens and underscores
+        normalizedSlug = shortSlug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
+      }
+
+      if (!normalizedSlug) {
+        normalizedSlug = generateId(6);
+      }
+
+      // Check duplicate in database
+      try {
+        const existing = await prisma.link.findUnique({
+          where: { shortSlug: normalizedSlug }
+        });
+
+        if (existing) {
+          skipped.push({
+            originalUrl: originalUrl,
+            shortSlug: normalizedSlug,
+            title: title || originalUrl,
+            reason: "Slug sudah digunakan / Slug already in use"
+          });
+          continue;
+        }
+
+        // Determine title
+        let finalTitle = title ? title.trim() : "";
+        if (!finalTitle) {
+          try {
+            const parsed = new URL(formattedUrl);
+            finalTitle = parsed.hostname.replace(/^www\./i, "");
+            finalTitle = finalTitle.charAt(0).toUpperCase() + finalTitle.slice(1);
+          } catch {
+            finalTitle = formattedUrl;
+          }
+        }
+
+        const id = "link_" + generateId(12);
+        const newLink = await prisma.link.create({
+          data: {
+            id,
+            userId,
+            originalUrl: formattedUrl,
+            shortSlug: normalizedSlug,
+            title: finalTitle,
+            category: category || "general",
+            collectionId: collectionId || null,
+            clickCount: 0,
+            qrScanCount: 0,
+            isEnabled: true
+          }
+        });
+
+        imported.push(newLink);
+      } catch (err: any) {
+        skipped.push({
+          originalUrl: originalUrl,
+          shortSlug: normalizedSlug,
+          title: title || originalUrl,
+          reason: err.message || "Gagal menyimpan / Failed to save"
+        });
+      }
+    }
+
+    return res.json({
+      importedCount: imported.length,
+      skippedCount: skipped.length,
+      skipped
+    });
+  });
+
   // Google OAuth Authorization URLs
   app.get("/api/auth/google/url", (req, res) => {
     const redirectUri = process.env.APP_URL 

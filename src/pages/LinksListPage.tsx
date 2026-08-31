@@ -2,7 +2,7 @@ import React from "react";
 import { 
   List, Plus, Search, SlidersHorizontal, ArrowUpDown, CheckSquare, Square, 
   Eye, EyeOff, Lock, Layers, QrCode, Edit2, ExternalLink, Trash2, 
-  ChevronLeft, ChevronRight, Check, Copy, Clock
+  ChevronLeft, ChevronRight, Check, Copy, Clock, Upload
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { APP_THEME_CONFIGS, CATEGORY_OPTIONS, TRANSLATIONS } from "../constants";
@@ -58,6 +58,7 @@ interface LinksListPageProps {
   setCurrentTab: (tab: string) => void;
   isLightMode: boolean;
   appTheme: keyof typeof APP_THEME_CONFIGS;
+  setIsBulkImportOpen: (open: boolean) => void;
 }
 
 export default function LinksListPage({
@@ -100,6 +101,7 @@ export default function LinksListPage({
   setCurrentTab,
   isLightMode,
   appTheme,
+  setIsBulkImportOpen,
 }: LinksListPageProps) {
   const curT = APP_THEME_CONFIGS[appTheme];
   const t = (key: keyof typeof TRANSLATIONS.id) => {
@@ -124,7 +126,19 @@ export default function LinksListPage({
           </h1>
           <p className="text-zinc-500 text-sm">{t("linksListSubtitle")}</p>
         </div>
-        <div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsBulkImportOpen(true)}
+            className={cn(
+              "font-bold px-4 py-3 rounded-xl border transition-all flex items-center gap-2 text-sm cursor-pointer shadow-sm",
+              isLightMode 
+                ? "bg-zinc-100 hover:bg-zinc-205 text-zinc-900 border-zinc-250 border border-zinc-200" 
+                : "bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700"
+            )}
+          >
+            <Upload className="w-4 h-4 text-brand-500" />
+            {lang === "id" ? "Impor Massal" : "Bulk Import"}
+          </button>
           <button
             onClick={() => { setSelectedDetailLinkId(null); setEditingLink(null); setIsModalOpen(true); }}
             className={cn("text-black font-extrabold px-5 py-3 rounded-xl transition-all shadow-lg flex items-center gap-2 text-sm cursor-pointer", curT.bg, curT.hoverBg, curT.shadowAccent)}

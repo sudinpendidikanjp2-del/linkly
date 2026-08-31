@@ -1,5 +1,5 @@
 import { db, doc, deleteDoc, updateDoc, setDoc } from "../api";
-import { LinkData } from "../types";
+import { LinkData, BulkImportItem, BulkImportResult } from "../types";
 import { nanoid } from "nanoid";
 import { LinksApi } from "../lib/api/links.api";
 
@@ -29,5 +29,9 @@ export class LinkService {
       await setDoc(doc(db, "links", finalId), linkData);
     }
     return finalId;
+  }
+
+  static async bulkImportLinks(userId: string, items: BulkImportItem[]): Promise<BulkImportResult> {
+    return await LinksApi.bulkImportLinks(userId, items);
   }
 }

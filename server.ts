@@ -484,16 +484,10 @@ async function startServer() {
           continue;
         }
 
-        // Determine title
+        // Determine title: if title is missing, short slug becomes default title
         let finalTitle = title ? title.trim() : "";
         if (!finalTitle) {
-          try {
-            const parsed = new URL(formattedUrl);
-            finalTitle = parsed.hostname.replace(/^www\./i, "");
-            finalTitle = finalTitle.charAt(0).toUpperCase() + finalTitle.slice(1);
-          } catch {
-            finalTitle = formattedUrl;
-          }
+          finalTitle = normalizedSlug;
         }
 
         const id = "link_" + generateId(12);

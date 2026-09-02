@@ -91,8 +91,7 @@ export async function signInWithPopup(authInstance: typeof auth, provider: any):
     );
 
     if (!popup) {
-      alert("Harap aktifkan pop-up browser untuk masuk menggunakan Google.");
-      reject(new Error("Popup blocked"));
+      reject(new Error("Popup blocked: Harap aktifkan pop-up browser untuk masuk menggunakan Google."));
       return;
     }
 

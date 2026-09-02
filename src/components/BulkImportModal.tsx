@@ -84,7 +84,7 @@ export default function BulkImportModal({
         }
 
         const shortSlug = parts[1] || undefined;
-        const title = parts[2] || undefined;
+        const title = parts[2] || shortSlug || undefined;
         const category = parts[3] || defaultCategory || undefined;
         const collectionId = defaultCollectionId || undefined;
 
@@ -433,7 +433,7 @@ export default function BulkImportModal({
                   >
                     <div className="flex items-start justify-between gap-2 mb-1">
                       <p className={cn("text-xs font-bold truncate flex-1", textTitle)}>
-                        {item.title || item.originalUrl}
+                        {item.title || item.shortSlug || item.originalUrl}
                       </p>
                       <span className="text-[9px] bg-brand-500/10 text-brand-500 px-1.5 py-0.5 rounded-md font-mono font-bold shrink-0">
                         /{item.shortSlug || "random"}

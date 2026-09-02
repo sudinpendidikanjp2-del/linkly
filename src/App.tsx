@@ -26,6 +26,7 @@ import LinkTreePage from "./pages/LinkTreePage";
 import CreateLinkModal from "./components/CreateLinkModal";
 import BulkImportModal from "./components/BulkImportModal";
 import DuplicateSlugAlertModal from "./components/DuplicateSlugAlertModal";
+import ConfirmModal from "./components/ConfirmModal";
 
 // Import services for business logic abstraction (Phase 1)
 import { AuthService } from "./services/auth.service";
@@ -274,6 +275,23 @@ export default function App() {
   const [skippedItems, setSkippedItems] = useState<BulkImportSkippedItem[]>([]);
   const [importedCount, setImportedCount] = useState(0);
 
+  // Confirm Modal State
+  const [confirmState, setConfirmState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText?: string;
+    cancelText?: string;
+    variant?: "danger" | "warning" | "info";
+    onConfirm: () => void | Promise<void>;
+    isLoading?: boolean;
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+  });
+
   const handleBulkImport = async (items: BulkImportItem[]) => {
     if (!user) return;
     setIsImporting(true);
@@ -481,8 +499,24 @@ export default function App() {
   const handleLogin = async () => {
     try {
       await AuthService.login();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login error:", error);
+      const msg = error?.message || "";
+      if (msg.includes("Popup blocked")) {
+        showToast(
+          lang === "id"
+            ? "Harap aktifkan pop-up browser untuk masuk menggunakan Google."
+            : "Please enable browser pop-ups to log in with Google.",
+          "error"
+        );
+      } else {
+        showToast(
+          lang === "id"
+            ? "Gagal masuk menggunakan Google."
+            : "Failed to log in with Google.",
+          "error"
+        );
+      }
     }
   };
 
@@ -497,37 +531,61 @@ export default function App() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const handleDelete = async (id: string) => {
-    if (window.confirm("Apakah Anda yakin ingin menghapus tautan ini?")) {
-      try {
-        await LinkService.deleteLink(id);
-        await queryClient.invalidateQueries({ queryKey: ["links_registry"] });
-        await queryClient.invalidateQueries({ queryKey: ["dashboard_stats"] });
-        await queryClient.invalidateQueries({ queryKey: ["links", user?.uid] });
-        setSelectedLinkIds(prev => prev.filter(item => item !== id));
-        showToast(lang === "id" ? "Tautan berhasil dihapus!" : "Link deleted successfully!");
-      } catch (err) {
-        console.error(err);
-        showToast(lang === "id" ? "Gagal menghapus tautan." : "Failed to delete link.", "error");
+  const handleDelete = (id: string) => {
+    setConfirmState({
+      isOpen: true,
+      title: lang === "id" ? "Hapus Tautan" : "Delete Link",
+      message: lang === "id" ? "Apakah Anda yakin ingin menghapus tautan ini? Tindakan ini tidak dapat dibatalkan." : "Are you sure you want to delete this link? This action cannot be undone.",
+      confirmText: lang === "id" ? "Hapus" : "Delete",
+      cancelText: lang === "id" ? "Batal" : "Cancel",
+      variant: "danger",
+      onConfirm: async () => {
+        setConfirmState(prev => ({ ...prev, isLoading: true }));
+        try {
+          await LinkService.deleteLink(id);
+          await queryClient.invalidateQueries({ queryKey: ["links_registry"] });
+          await queryClient.invalidateQueries({ queryKey: ["dashboard_stats"] });
+          await queryClient.invalidateQueries({ queryKey: ["links", user?.uid] });
+          setSelectedLinkIds(prev => prev.filter(item => item !== id));
+          showToast(lang === "id" ? "Tautan berhasil dihapus!" : "Link deleted successfully!");
+        } catch (err) {
+          console.error(err);
+          showToast(lang === "id" ? "Gagal menghapus tautan." : "Failed to delete link.", "error");
+        } finally {
+          setConfirmState(prev => ({ ...prev, isOpen: false, isLoading: false }));
+        }
       }
-    }
+    });
   };
 
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = () => {
     if (selectedLinkIds.length === 0) return;
-    if (window.confirm(`Apakah Anda yakin ingin menghapus ${selectedLinkIds.length} tautan secara massal?`)) {
-      try {
-        await LinkService.bulkDeleteLinks(selectedLinkIds);
-        await queryClient.invalidateQueries({ queryKey: ["links_registry"] });
-        await queryClient.invalidateQueries({ queryKey: ["dashboard_stats"] });
-        await queryClient.invalidateQueries({ queryKey: ["links", user?.uid] });
-        setSelectedLinkIds([]);
-        showToast(lang === "id" ? `${selectedLinkIds.length} tautan berhasil dihapus secara massal!` : `${selectedLinkIds.length} links deleted successfully!`);
-      } catch (err) {
-        console.error(err);
-        showToast(lang === "id" ? "Gagal menghapus tautan secara massal." : "Failed to bulk delete links.", "error");
+    setConfirmState({
+      isOpen: true,
+      title: lang === "id" ? "Hapus Massal Tautan" : "Bulk Delete Links",
+      message: lang === "id" 
+        ? `Apakah Anda yakin ingin menghapus ${selectedLinkIds.length} tautan secara massal?` 
+        : `Are you sure you want to delete ${selectedLinkIds.length} links in bulk?`,
+      confirmText: lang === "id" ? "Hapus Massal" : "Bulk Delete",
+      cancelText: lang === "id" ? "Batal" : "Cancel",
+      variant: "danger",
+      onConfirm: async () => {
+        setConfirmState(prev => ({ ...prev, isLoading: true }));
+        try {
+          await LinkService.bulkDeleteLinks(selectedLinkIds);
+          await queryClient.invalidateQueries({ queryKey: ["links_registry"] });
+          await queryClient.invalidateQueries({ queryKey: ["dashboard_stats"] });
+          await queryClient.invalidateQueries({ queryKey: ["links", user?.uid] });
+          setSelectedLinkIds([]);
+          showToast(lang === "id" ? `${selectedLinkIds.length} tautan berhasil dihapus secara massal!` : `${selectedLinkIds.length} links deleted successfully!`);
+        } catch (err) {
+          console.error(err);
+          showToast(lang === "id" ? "Gagal menghapus tautan secara massal." : "Failed to bulk delete links.", "error");
+        } finally {
+          setConfirmState(prev => ({ ...prev, isOpen: false, isLoading: false }));
+        }
       }
-    }
+    });
   };
 
   const toggleSelectLink = (id: string) => {
@@ -593,7 +651,7 @@ export default function App() {
       userId: user?.uid,
       originalUrl,
       shortSlug,
-      title: formTitle || originalUrl,
+      title: formTitle || shortSlug || originalUrl,
       clickCount: editingLink ? editingLink.clickCount : 0,
       qrScanCount: editingLink ? (editingLink.qrScanCount || 0) : 0,
       collectionId: formCollectionId || "",
@@ -681,26 +739,37 @@ export default function App() {
     }
   };
 
-  const handleDeleteCollection = async (colId: string) => {
-    if (!confirm(lang === "id" ? "Apakah Anda yakin ingin menghapus koleksi ini?" : "Are you sure you want to delete this collection?")) return;
+  const handleDeleteCollection = (colId: string) => {
+    setConfirmState({
+      isOpen: true,
+      title: lang === "id" ? "Hapus Koleksi" : "Delete Collection",
+      message: lang === "id" ? "Apakah Anda yakin ingin menghapus koleksi ini?" : "Are you sure you want to delete this collection?",
+      confirmText: lang === "id" ? "Hapus" : "Delete",
+      cancelText: lang === "id" ? "Batal" : "Cancel",
+      variant: "danger",
+      onConfirm: async () => {
+        setConfirmState(prev => ({ ...prev, isLoading: true }));
+        try {
+          const col = collections.find(c => c.id === colId);
+          const linkIds = col ? col.linkIds : [];
+          await CollectionService.deleteCollection(colId, linkIds);
 
-    try {
-      const col = collections.find(c => c.id === colId);
-      const linkIds = col ? col.linkIds : [];
-      await CollectionService.deleteCollection(colId, linkIds);
-
-      if (activeCollectionId === colId) {
-        setActiveCollectionId(null);
+          if (activeCollectionId === colId) {
+            setActiveCollectionId(null);
+          }
+          await queryClient.invalidateQueries({ queryKey: ["collections", user?.uid] });
+          await queryClient.invalidateQueries({ queryKey: ["links_registry"] });
+          await queryClient.invalidateQueries({ queryKey: ["dashboard_stats"] });
+          await queryClient.invalidateQueries({ queryKey: ["links", user?.uid] });
+          showToast(lang === "id" ? "Koleksi berhasil dihapus!" : "Collection deleted successfully!");
+        } catch (err) {
+          console.error(err);
+          showToast(lang === "id" ? "Gagal menghapus koleksi." : "Failed to delete collection.", "error");
+        } finally {
+          setConfirmState(prev => ({ ...prev, isOpen: false, isLoading: false }));
+        }
       }
-      await queryClient.invalidateQueries({ queryKey: ["collections", user?.uid] });
-      await queryClient.invalidateQueries({ queryKey: ["links_registry"] });
-      await queryClient.invalidateQueries({ queryKey: ["dashboard_stats"] });
-      await queryClient.invalidateQueries({ queryKey: ["links", user?.uid] });
-      showToast(lang === "id" ? "Koleksi berhasil dihapus!" : "Collection deleted successfully!");
-    } catch (err) {
-      console.error(err);
-      showToast(lang === "id" ? "Gagal menghapus koleksi." : "Failed to delete collection.", "error");
-    }
+    });
   };
 
   const onQuickAddLink = async (linkId: string, colId: string) => {
@@ -2131,6 +2200,25 @@ export default function App() {
             skippedItems={skippedItems}
             importedCount={importedCount}
             lang={lang}
+            isLightMode={isLightMode}
+            appTheme={appTheme}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Universal Confirmation UI Modal */}
+      <AnimatePresence>
+        {confirmState.isOpen && (
+          <ConfirmModal
+            isOpen={confirmState.isOpen}
+            onClose={() => setConfirmState(prev => ({ ...prev, isOpen: false }))}
+            onConfirm={confirmState.onConfirm}
+            title={confirmState.title}
+            message={confirmState.message}
+            confirmText={confirmState.confirmText}
+            cancelText={confirmState.cancelText}
+            variant={confirmState.variant}
+            isLoading={confirmState.isLoading}
             isLightMode={isLightMode}
             appTheme={appTheme}
           />

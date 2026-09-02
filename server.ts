@@ -241,12 +241,42 @@ async function startServer() {
           fs.writeFileSync(schemaPath, schemaContent, "utf-8");
 
           console.log(`Attempting to push schema to PostgreSQL: ${dbUrl!.replace(/:[^:@]+@/, ":****@")}...`);
-          await runCommandAsync("npx prisma db push --accept-data-loss", {
-            env: { ...process.env, DATABASE_URL: dbUrl },
-          });
+          let pushSuccess = false;
+          let lastErr: any = null;
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+              if (attempt > 1) {
+                console.log(`Retry attempt ${attempt}/3 connecting to PostgreSQL...`);
+                await new Promise((r) => setTimeout(r, 2000));
+              }
+              await runCommandAsync("npx prisma db push --accept-data-loss", {
+                env: { ...process.env, DATABASE_URL: dbUrl },
+              });
+              pushSuccess = true;
+              break;
+            } catch (err) {
+              lastErr = err;
+            }
+          }
+
+          if (!pushSuccess) {
+            throw lastErr || new Error("Failed to connect or push schema to PostgreSQL after 3 attempts");
+          }
           
           console.log("Database schema synchronized successfully on PostgreSQL.");
           process.env.DATABASE_URL = dbUrl;
+
+          // Ensure default global settings exist in DB
+          try {
+            await prisma.globalSettings.upsert({
+              where: { id: "default" },
+              update: {},
+              create: { id: "default", registrationEnabled: true },
+            });
+            console.log("Default global settings verified in database.");
+          } catch (seedErr) {
+            console.warn("Could not seed default global settings on startup (may exist already):", seedErr);
+          }
         } catch (dbError) {
           console.error("Prisma database push failed on PostgreSQL. Falling back to local SQLite as a fallback...", dbError);
           await setupSQLite();

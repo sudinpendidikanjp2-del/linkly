@@ -42,6 +42,7 @@ CREATE TABLE "Link" (
     "collectionId" VARCHAR(255),
     "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     "expiresAt" TIMESTAMP WITH TIME ZONE,
+    "activatedAt" TIMESTAMP WITH TIME ZONE,
     "title" VARCHAR(255) NOT NULL,
     "password" VARCHAR(255),
     "landingEnabled" BOOLEAN DEFAULT FALSE NOT NULL,
@@ -99,6 +100,7 @@ CREATE TABLE "LinkTree" (
     "treeGithub" VARCHAR(255),
     "treeVideoUrl" TEXT,
     "treeButtonBgImage" TEXT,
+    "treeShowFolders" BOOLEAN DEFAULT TRUE NOT NULL,
     "updatedAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
     CONSTRAINT "LinkTree_id_fkey" FOREIGN KEY ("id") REFERENCES "User" ("id") ON DELETE CASCADE
 );

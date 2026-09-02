@@ -40,24 +40,10 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Copy package manifests and prisma directory for schema
+# Copy package manifests, prisma schema, and scripts
 COPY package.json package-lock.json ./
 COPY prisma ./prisma/
 COPY scripts ./scripts/
-COPY init-db.sh ./init-db.sh
-
-# Install production dependencies
-RUN npm ci --only=production
-
-# Re-generate Prisma Client in the production node_modules directory
-RUN npx prisma generate
-
-# Copy bundled server and built client static assets from builder stage
-COPY --from=builder /app/dist ./dist
-
-# Ensure init-db.sh is executable and set correct ownership for node user
-RUN chmod +x ./init-db.sh && \
-    chown -R node:node /app
 
 # Install only production dependencies
 RUN npm ci --only=production
@@ -67,6 +53,9 @@ RUN npx prisma generate
 
 # Copy bundled server and built client pages from builder stage
 COPY --from=builder /app/dist ./dist
+
+# Ensure app directory is owned by node user for permission compliance
+RUN chown -R node:node /app
 
 # Use a non-privileged system user for security
 USER node

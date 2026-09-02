@@ -40,10 +40,10 @@ jobs:
     optional: false
   - type: PullRepository
     name: pull github
-    remoteUrl: https://github.com/mistersupri/powerdrive.git
+    remoteUrl: https://github.com/mistersupri/linkly-new.git
     userName: mistersupri
     passwordSecret: github
-    targetProject: mistersupri/powerdrive
+    targetProject: mistersupri/linkly-new
     accessTokenSecret: onedev
     refs: main
     withLfs: false

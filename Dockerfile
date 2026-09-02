@@ -36,14 +36,19 @@ RUN apt-get update -y && \
     apt-get install -y openssl ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
+# Set up the work directory and make sure the node user owns it
+RUN mkdir -p /app && chown -R node:node /app
 WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Copy package manifests, prisma schema, and scripts
-COPY package.json package-lock.json ./
-COPY prisma ./prisma/
-COPY scripts ./scripts/
+# Switch to non-privileged user for security
+USER node
+
+# Copy package manifests, prisma schema, and scripts with correct ownership
+COPY --chown=node:node package.json package-lock.json ./
+COPY --chown=node:node prisma ./prisma/
+COPY --chown=node:node scripts ./scripts/
 
 # Install only production dependencies
 RUN npm ci --only=production
@@ -52,13 +57,7 @@ RUN npm ci --only=production
 RUN npx prisma generate
 
 # Copy bundled server and built client pages from builder stage
-COPY --from=builder /app/dist ./dist
-
-# Ensure app directory is owned by node user for permission compliance
-RUN chown -R node:node /app
-
-# Use a non-privileged system user for security
-USER node
+COPY --from=builder --chown=node:node /app/dist ./dist
 
 # Expose port 3000 (ingress routing)
 EXPOSE 3000

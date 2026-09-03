@@ -56,6 +56,7 @@ interface DashboardPageProps {
   isLightMode: boolean;
   appTheme: keyof typeof APP_THEME_CONFIGS;
   setIsBulkImportOpen: (open: boolean) => void;
+  dashboardStats?: any;
 }
 
 export default function DashboardPage({
@@ -89,6 +90,7 @@ export default function DashboardPage({
   isLightMode,
   appTheme,
   setIsBulkImportOpen,
+  dashboardStats,
 }: DashboardPageProps) {
   const curT = APP_THEME_CONFIGS[appTheme];
   const t = (key: keyof typeof TRANSLATIONS.id) => {
@@ -155,7 +157,7 @@ export default function DashboardPage({
             </div>
             <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">{t("totalLinks")}</span>
           </div>
-          <p className="text-3xl font-extrabold">{links.length}</p>
+          <p className="text-3xl font-extrabold">{dashboardStats?.totalLinks !== undefined ? dashboardStats.totalLinks : links.length}</p>
         </div>
         <div className={cn("p-6 rounded-3xl", cardBg)}>
           <div className="flex items-center justify-between mb-4">
@@ -164,7 +166,7 @@ export default function DashboardPage({
             </div>
             <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">{t("totalClicks")}</span>
           </div>
-          <p className="text-3xl font-extrabold">{links.reduce((acc, curr) => acc + (curr.clickCount || 0), 0)}</p>
+          <p className="text-3xl font-extrabold">{dashboardStats?.totalClicks !== undefined ? dashboardStats.totalClicks : links.reduce((acc, curr) => acc + (curr.clickCount || 0), 0)}</p>
         </div>
         <div className={cn("p-6 rounded-3xl", cardBg)}>
           <div className="flex items-center justify-between mb-4">
@@ -173,7 +175,7 @@ export default function DashboardPage({
             </div>
             <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">{t("activeLinks")}</span>
           </div>
-          <p className="text-3xl font-extrabold">{links.filter(l => !l.expiresAt || new Date(l.expiresAt) > new Date()).length}</p>
+          <p className="text-3xl font-extrabold">{dashboardStats?.activeLinks !== undefined ? dashboardStats.activeLinks : links.filter(l => !l.expiresAt || new Date(l.expiresAt) > new Date()).length}</p>
         </div>
         <div className={cn("p-6 rounded-3xl", cardBg)}>
           <div className="flex items-center justify-between mb-4">
@@ -183,10 +185,10 @@ export default function DashboardPage({
             <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">{lang === "id" ? "Scan Rate QR" : "QR Scan Rate"}</span>
           </div>
           <div className="flex items-baseline gap-2">
-            <p className="text-3xl font-extrabold text-brand-500">{links.reduce((acc, curr) => acc + (curr.qrScanCount || 0), 0)}</p>
+            <p className="text-3xl font-extrabold text-brand-500">{dashboardStats?.qrScanCount !== undefined ? dashboardStats.qrScanCount : links.reduce((acc, curr) => acc + (curr.qrScanCount || 0), 0)}</p>
             <span className="text-sm font-semibold text-zinc-500 font-mono">
-              ({links.reduce((acc, curr) => acc + (curr.clickCount || 0), 0) > 0 
-                ? ((links.reduce((acc, curr) => acc + (curr.qrScanCount || 0), 0) / links.reduce((acc, curr) => acc + (curr.clickCount || 0), 0)) * 100).toFixed(1) 
+              ({(dashboardStats?.totalClicks !== undefined ? dashboardStats.totalClicks : links.reduce((acc, curr) => acc + (curr.clickCount || 0), 0)) > 0 
+                ? (((dashboardStats?.qrScanCount !== undefined ? dashboardStats.qrScanCount : links.reduce((acc, curr) => acc + (curr.qrScanCount || 0), 0)) / (dashboardStats?.totalClicks !== undefined ? dashboardStats.totalClicks : links.reduce((acc, curr) => acc + (curr.clickCount || 0), 0))) * 100).toFixed(1) 
                 : "0.0"}%)
             </span>
           </div>

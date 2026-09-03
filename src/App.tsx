@@ -1536,6 +1536,7 @@ export default function App() {
           <LinksListPage
             lang={lang}
             links={links}
+            totalCount={totalCount}
             searchTerm={searchTerm}
             setSearchTerm={setSearchTerm}
             filterStatus={filterStatus}
@@ -1671,6 +1672,7 @@ export default function App() {
             isLightMode={isLightMode}
             appTheme={appTheme}
             setIsBulkImportOpen={setIsBulkImportOpen}
+            dashboardStats={queryDashboardStats}
           />
         )}
       </main>

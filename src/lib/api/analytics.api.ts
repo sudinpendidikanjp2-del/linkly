@@ -2,7 +2,7 @@ import { ClickEvent } from "../../types";
 
 export class AnalyticsApi {
   static async getDashboardStats(userId: string): Promise<any> {
-    const res = await fetch(`/api/dashboard/stats?userId=${encodeURIComponent(userId)}`);
+    const res = await fetch(`/api/stats?userId=${encodeURIComponent(userId)}`);
     if (!res.ok) throw new Error("Failed to fetch dashboard stats");
     return await res.json();
   }

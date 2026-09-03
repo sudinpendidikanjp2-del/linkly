@@ -889,7 +889,7 @@ async function startServer() {
     }
   });
 
-  app.get("/api/dashboard/stats", async (req, res) => {
+  app.get(["/api/dashboard/stats", "/api/stats"], async (req, res) => {
     try {
       const rawUserId = req.query.userId as string;
       const userId = await resolveUserId(rawUserId);

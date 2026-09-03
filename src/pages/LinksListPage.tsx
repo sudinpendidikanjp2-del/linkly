@@ -17,6 +17,7 @@ function cn(...inputs: ClassValue[]) {
 interface LinksListPageProps {
   lang: "id" | "en";
   links: LinkData[];
+  totalCount: number;
   searchTerm: string;
   setSearchTerm: (v: string) => void;
   filterStatus: "all" | "active" | "expired";
@@ -64,6 +65,7 @@ interface LinksListPageProps {
 export default function LinksListPage({
   lang,
   links,
+  totalCount,
   searchTerm,
   setSearchTerm,
   filterStatus,
@@ -568,7 +570,7 @@ export default function LinksListPage({
               ))}
             </select>
             <span className="text-zinc-500">|</span>
-            <span className={cn(isLightMode ? "text-zinc-600" : "text-zinc-400")}>{t("showing")} {Math.min(listFilteredLinks.length, (listCurrentPage - 1) * listItemsPerPage + 1)}-{Math.min(listFilteredLinks.length, listCurrentPage * listItemsPerPage)} {t("of")} {listFilteredLinks.length} {t("links")}</span>
+            <span className={cn(isLightMode ? "text-zinc-600" : "text-zinc-400")}>{t("showing")} {Math.min(listFilteredLinks.length, (listCurrentPage - 1) * listItemsPerPage + 1)}-{Math.min(listFilteredLinks.length, listCurrentPage * listItemsPerPage)} {t("of")} {totalCount} {t("links")}</span>
           </div>
 
           <div className="flex items-center gap-1">

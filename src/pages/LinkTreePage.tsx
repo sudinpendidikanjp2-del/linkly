@@ -1,8 +1,8 @@
-import React from "react";
+import React, { useState } from "react";
 import { 
   Layers, Check, Copy, ExternalLink, Link2, Upload, Instagram, Twitter, 
   Linkedin, Youtube, Github, Image, CheckSquare, Folder, FolderOpen,
-  ChevronUp, ChevronDown
+  ChevronUp, ChevronDown, Plus, Trash2, Search, X, ArrowUp, ArrowDown, CheckCircle2
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { APP_THEME_CONFIGS, THEME_STYLES, TRANSLATIONS } from "../constants";
@@ -111,6 +111,25 @@ export default function LinkTreePage({
   const t = (key: keyof typeof TRANSLATIONS.id) => {
     return TRANSLATIONS[lang]?.[key] || key;
   };
+
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [modalSearchTerm, setModalSearchTerm] = useState("");
+  const [modalSelectedIds, setModalSelectedIds] = useState<string[]>([]);
+
+  const displayedSelectedLinks = treeLinks
+    .map(id => links.find(l => l.id === id))
+    .filter((l): l is LinkData => Boolean(l));
+
+  const activeLinks = links.filter(l => !l.expiresAt || new Date(l.expiresAt) > new Date());
+  const filteredActiveLinks = activeLinks.filter(l => {
+    if (!modalSearchTerm.trim()) return true;
+    const q = modalSearchTerm.toLowerCase();
+    return (
+      (l.title || "").toLowerCase().includes(q) ||
+      (l.shortSlug || "").toLowerCase().includes(q) ||
+      (l.originalUrl || "").toLowerCase().includes(q)
+    );
+  });
 
   const textTitle = isLightMode ? "text-zinc-950 font-black" : "text-white font-extrabold";
   const textMuted = isLightMode ? "text-zinc-505 text-zinc-500 font-medium" : "text-zinc-400";
@@ -617,58 +636,114 @@ export default function LinkTreePage({
           </div>
         </div>
 
-        {/* Toggle links list on tree */}
+        {/* Selected displayed links on LinkTree */}
         <div className={cn("p-6 rounded-3xl space-y-4 border transition-all", cardBg)}>
-          <div className={cn("flex items-center justify-between border-b pb-3", borderClassic)}>
-            <h3 className={cn("text-sm font-bold uppercase tracking-wider", isLightMode ? "text-zinc-700" : "text-zinc-300")}>{t("choosePageTheme")}</h3>
-            <p className={cn("text-[10px]", isLightMode ? "text-zinc-500" : "text-zinc-450")}>{t("useToggleToPin")}</p>
+          <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-3", borderClassic)}>
+            <div className="space-y-0.5 text-left">
+              <h3 className={cn("text-sm font-bold uppercase tracking-wider", isLightMode ? "text-zinc-700" : "text-zinc-300")}>
+                {lang === "id" ? "Tautan yang Ditampilkan" : "Displayed Links"}
+              </h3>
+              <p className={cn("text-[10px]", isLightMode ? "text-zinc-500" : "text-zinc-400")}>
+                {lang === "id" ? "Kelola tautan yang akan muncul di Bio LinkTree Anda" : "Manage links displayed on your Bio LinkTree"}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setModalSelectedIds([...treeLinks]);
+                setModalSearchTerm("");
+                setIsAddModalOpen(true);
+              }}
+              className={cn("px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm shrink-0", curT.bg, curT.hoverBg, "text-black")}
+            >
+              <Plus className="w-4 h-4" />
+              {lang === "id" ? "Tambah Tautan" : "Add Link"}
+            </button>
           </div>
-          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-            {links.map((link) => {
-              const isChecked = treeLinks.includes(link.id);
-              return (
-                <div 
+
+          {displayedSelectedLinks.length === 0 ? (
+            <div className={cn("py-8 px-4 border rounded-2xl text-center flex flex-col items-center justify-center space-y-3", isLightMode ? "bg-zinc-50/80 border-zinc-200/80" : "bg-zinc-950/50 border-zinc-850")}>
+              <div className={cn("w-10 h-10 rounded-2xl flex items-center justify-center border", isLightMode ? "bg-white border-zinc-200 text-zinc-400" : "bg-zinc-900 border-zinc-800 text-zinc-500")}>
+                <Link2 className="w-5 h-5" />
+              </div>
+              <div className="space-y-1 max-w-sm">
+                <p className={cn("text-xs font-bold", isLightMode ? "text-zinc-700" : "text-zinc-300")}>
+                  {lang === "id" ? "Belum Ada Tautan yang Ditampilkan" : "No Links Displayed Yet"}
+                </p>
+                <p className={cn("text-[11px] leading-relaxed", isLightMode ? "text-zinc-500" : "text-zinc-400")}>
+                  {lang === "id"
+                    ? "Secara default tidak ada tautan yang ditampilkan. Klik tombol 'Tambah Tautan' untuk memilih tautan yang ingin ditampilkan."
+                    : "By default no links are displayed. Click 'Add Link' to select links to be displayed."}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+              {displayedSelectedLinks.map((link, index) => (
+                <div
                   key={link.id}
-                  onClick={() => {
-                    setTreeLinks(prev => 
-                      prev.includes(link.id)
-                        ? prev.filter(id => id !== link.id)
-                        : [...prev, link.id]
-                    );
-                  }}
                   className={cn(
-                    "flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer select-none",
-                    isChecked 
-                      ? (isLightMode ? "bg-brand-500/[0.04] border-brand-500" : "bg-zinc-950 border-brand-500/25")
-                      : (isLightMode ? "bg-white border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50 text-zinc-700" : "bg-zinc-950/40 border-zinc-850 hover:border-zinc-800 text-zinc-400")
+                    "flex items-center justify-between p-3 rounded-xl border transition-all text-left",
+                    isLightMode ? "bg-white border-zinc-200 hover:border-zinc-300 text-zinc-800" : "bg-zinc-950/60 border-zinc-850 hover:border-zinc-800 text-zinc-200"
                   )}
                 >
-                  <div className="flex-1 min-w-0 pr-4 text-left">
-                    <p className={cn("text-xs font-bold truncate", isLightMode ? (isChecked ? "text-brand-600" : "text-zinc-800") : "text-zinc-200")}>{link.title || link.shortSlug}</p>
-                    <p className="text-[10px] font-mono text-zinc-550 text-zinc-500 truncate">/{link.shortSlug}</p>
+                  <div className="flex items-center gap-3 min-w-0 flex-1 pr-2">
+                    <span className={cn("text-[10px] font-mono font-bold px-2 py-0.5 rounded-md shrink-0", isLightMode ? "bg-zinc-100 text-zinc-600" : "bg-zinc-900 text-zinc-400")}>
+                      #{index + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold truncate">{link.title || link.shortSlug}</p>
+                      <p className="text-[10px] font-mono text-zinc-500 truncate">/{link.shortSlug}</p>
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    className={cn(
-                      "w-8 h-4 rounded-full p-0.5 transition-colors relative duration-300 pointer-events-none",
-                      isChecked ? "bg-brand-500" : (isLightMode ? "bg-zinc-200" : "bg-zinc-805")
+                  <div className="flex items-center gap-1 shrink-0">
+                    {index > 0 && (
+                      <button
+                        type="button"
+                        title={lang === "id" ? "Pindah ke atas" : "Move up"}
+                        onClick={() => {
+                          const newLinks = [...treeLinks];
+                          const temp = newLinks[index];
+                          newLinks[index] = newLinks[index - 1];
+                          newLinks[index - 1] = temp;
+                          setTreeLinks(newLinks);
+                        }}
+                        className={cn("p-1.5 rounded-lg transition-all cursor-pointer", isLightMode ? "hover:bg-zinc-100 text-zinc-500" : "hover:bg-zinc-800 text-zinc-400")}
+                      >
+                        <ArrowUp className="w-3.5 h-3.5" />
+                      </button>
                     )}
-                  >
-                    <div className={cn(
-                      "w-3 h-3 rounded-full transition-transform duration-300 transform",
-                      isLightMode ? "bg-white" : "bg-black",
-                      isChecked ? "translate-x-4" : "translate-x-0"
-                    )} />
-                  </button>
+                    {index < displayedSelectedLinks.length - 1 && (
+                      <button
+                        type="button"
+                        title={lang === "id" ? "Pindah ke bawah" : "Move down"}
+                        onClick={() => {
+                          const newLinks = [...treeLinks];
+                          const temp = newLinks[index];
+                          newLinks[index] = newLinks[index + 1];
+                          newLinks[index + 1] = temp;
+                          setTreeLinks(newLinks);
+                        }}
+                        className={cn("p-1.5 rounded-lg transition-all cursor-pointer", isLightMode ? "hover:bg-zinc-100 text-zinc-500" : "hover:bg-zinc-800 text-zinc-400")}
+                      >
+                        <ArrowDown className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      title={lang === "id" ? "Hapus dari tampilan Bio" : "Remove from Bio display"}
+                      onClick={() => {
+                        setTreeLinks(prev => prev.filter(id => id !== link.id));
+                      }}
+                      className={cn("p-1.5 rounded-lg transition-all cursor-pointer text-red-500 hover:bg-red-500/10")}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
-              );
-            })}
-            {links.length === 0 && (
-              <div className={cn("py-8 border rounded-2xl text-center text-zinc-505 text-zinc-500 text-xs italic font-mono", isLightMode ? "bg-zinc-50 border-zinc-200" : "bg-zinc-950/50 border-zinc-850")}>
-                {t("noLinksCreatedYet")}
-              </div>
-            )}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Action Button */}
@@ -705,12 +780,9 @@ export default function LinkTreePage({
           </div>
           {(() => {
             const s = THEME_STYLES[treeTheme as keyof typeof THEME_STYLES] || THEME_STYLES.slate;
-            const chosenLinks = links.filter(l => {
-              if (treeLinks.length > 0) {
-                return treeLinks.includes(l.id);
-              }
-              return true;
-            });
+            const chosenLinks = treeLinks
+              .map(id => links.find(l => l.id === id))
+              .filter((l): l is LinkData => Boolean(l));
             return (
               <div 
                 className={cn("flex-1 pt-12 pb-6 px-4 overflow-y-auto space-y-5 flex flex-col items-center justify-start text-center", s.bg)}
@@ -996,6 +1068,169 @@ export default function LinkTreePage({
           )} />
         </div>
       </div>
+
+      {/* Modal Selection for Adding Active Links */}
+      <AnimatePresence>
+        {isAddModalOpen && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className={cn(
+                "max-w-lg w-full rounded-3xl border shadow-2xl p-6 space-y-4 max-h-[85vh] flex flex-col text-left",
+                isLightMode ? "bg-white border-zinc-200 text-zinc-900" : "bg-zinc-900 border-zinc-800 text-white"
+              )}
+            >
+              {/* Modal Header */}
+              <div className="flex items-start justify-between gap-4 border-b pb-3 border-zinc-200/60 dark:border-zinc-800">
+                <div className="space-y-1">
+                  <h3 className="text-base font-extrabold flex items-center gap-2">
+                    <Plus className="w-5 h-5 text-brand-500" />
+                    {lang === "id" ? "Pilih Tautan untuk Ditampilkan" : "Select Links to Display"}
+                  </h3>
+                  <p className={cn("text-xs", textMuted)}>
+                    {lang === "id" ? "Pilih tautan aktif yang ingin dimuat pada Bio LinkTree Anda" : "Choose active links you want to feature on your Bio LinkTree"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className={cn("p-1.5 rounded-xl transition-all cursor-pointer", isLightMode ? "hover:bg-zinc-100 text-zinc-500" : "hover:bg-zinc-800 text-zinc-400")}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Search input & Select All controls */}
+              <div className="space-y-2">
+                <div className="relative">
+                  <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                  <input
+                    type="text"
+                    value={modalSearchTerm}
+                    onChange={(e) => setModalSearchTerm(e.target.value)}
+                    placeholder={lang === "id" ? "Cari judul atau slug tautan..." : "Search title or slug..."}
+                    className={cn("w-full pl-10 pr-9 py-2.5 rounded-xl text-xs font-medium outline-none transition-all", inputBg)}
+                  />
+                  {modalSearchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => setModalSearchTerm("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between text-[11px] font-medium px-1 pt-1">
+                  <span className={cn(isLightMode ? "text-zinc-500" : "text-zinc-400")}>
+                    {lang === "id" ? `${filteredActiveLinks.length} tautan aktif ditemukan` : `${filteredActiveLinks.length} active links found`}
+                  </span>
+                  {filteredActiveLinks.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const allFilteredIds = filteredActiveLinks.map(l => l.id);
+                        const isAllSelected = allFilteredIds.every(id => modalSelectedIds.includes(id));
+                        if (isAllSelected) {
+                          setModalSelectedIds(prev => prev.filter(id => !allFilteredIds.includes(id)));
+                        } else {
+                          const union = Array.from(new Set([...modalSelectedIds, ...allFilteredIds]));
+                          setModalSelectedIds(union);
+                        }
+                      }}
+                      className="text-brand-500 font-bold hover:underline cursor-pointer"
+                    >
+                      {filteredActiveLinks.every(l => modalSelectedIds.includes(l.id))
+                        ? (lang === "id" ? "Batal Pilih Semua" : "Deselect All")
+                        : (lang === "id" ? "Pilih Semua" : "Select All")}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Active Links Checkbox List */}
+              <div className="flex-1 overflow-y-auto space-y-2 pr-1 min-h-[180px]">
+                {filteredActiveLinks.map((link) => {
+                  const isChecked = modalSelectedIds.includes(link.id);
+                  return (
+                    <div
+                      key={link.id}
+                      onClick={() => {
+                        setModalSelectedIds(prev =>
+                          prev.includes(link.id)
+                            ? prev.filter(id => id !== link.id)
+                            : [...prev, link.id]
+                        );
+                      }}
+                      className={cn(
+                        "flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer select-none",
+                        isChecked
+                          ? (isLightMode ? "bg-brand-500/[0.06] border-brand-500" : "bg-zinc-950 border-brand-500/40")
+                          : (isLightMode ? "bg-white border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50" : "bg-zinc-950/40 border-zinc-850 hover:border-zinc-800")
+                      )}
+                    >
+                      <div className="flex items-center gap-3 min-w-0 pr-3">
+                        <div className={cn(
+                          "w-5 h-5 rounded-lg border flex items-center justify-center shrink-0 transition-all",
+                          isChecked
+                            ? "bg-brand-500 border-brand-500 text-black"
+                            : (isLightMode ? "border-zinc-300 bg-white" : "border-zinc-700 bg-zinc-900")
+                        )}>
+                          {isChecked && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                        </div>
+                        <div className="min-w-0 text-left">
+                          <p className={cn("text-xs font-bold truncate", isLightMode ? (isChecked ? "text-brand-600" : "text-zinc-800") : "text-zinc-200")}>
+                            {link.title || link.shortSlug}
+                          </p>
+                          <p className="text-[10px] font-mono text-zinc-500 truncate">
+                            /{link.shortSlug} <span className="opacity-60 font-sans">({link.originalUrl})</span>
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {filteredActiveLinks.length === 0 && (
+                  <div className={cn("py-10 border rounded-2xl text-center text-xs text-zinc-500 italic font-mono", isLightMode ? "bg-zinc-50 border-zinc-200" : "bg-zinc-950/50 border-zinc-850")}>
+                    {lang === "id" ? "Tidak ada tautan aktif yang sesuai." : "No matching active links found."}
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex items-center justify-between pt-3 border-t border-zinc-200/60 dark:border-zinc-800">
+                <span className="text-xs font-bold text-zinc-500">
+                  {lang === "id" ? `${modalSelectedIds.length} tautan dipilih` : `${modalSelectedIds.length} links selected`}
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddModalOpen(false)}
+                    className={cn("px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer", isLightMode ? "bg-zinc-100 hover:bg-zinc-200 text-zinc-700" : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300")}
+                  >
+                    {lang === "id" ? "Batal" : "Cancel"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTreeLinks(modalSelectedIds);
+                      setIsAddModalOpen(false);
+                    }}
+                    className={cn("px-5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer shadow-md flex items-center gap-1.5", curT.bg, curT.hoverBg, "text-black")}
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    {lang === "id" ? "Simpan" : "Save Selection"}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

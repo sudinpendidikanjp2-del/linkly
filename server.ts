@@ -1415,12 +1415,10 @@ async function startServer() {
       });
 
       // Filter active links
-      let activeLinks = links;
+      let activeLinks: any[] = [];
       const treeLinks = linkTree?.treeLinks ? JSON.parse(linkTree.treeLinks) : [];
-      if (Array.isArray(treeLinks) && treeLinks.length > 0 && !treeLinks.includes("__none__")) {
+      if (Array.isArray(treeLinks)) {
         activeLinks = links.filter((l: any) => treeLinks.includes(l.id));
-      } else if (Array.isArray(treeLinks) && treeLinks.includes("__none__")) {
-        activeLinks = [];
       }
 
       // Filter non-expired links

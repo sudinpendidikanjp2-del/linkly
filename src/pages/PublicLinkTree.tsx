@@ -39,13 +39,9 @@ export default function PublicLinkTree({
     const isExpired = l.expiresAt && new Date(l.expiresAt) < new Date();
     if (isExpired) return false;
 
-    if (publicTreeSettings.treeLinks && publicTreeSettings.treeLinks.length > 0 && !publicTreeSettings.treeLinks.includes("__none__")) {
+    if (Array.isArray(publicTreeSettings.treeLinks)) {
       return publicTreeSettings.treeLinks.includes(l.id);
     }
-    if (publicTreeSettings.treeLinks && publicTreeSettings.treeLinks.includes("__none__")) {
-      return false;
-    }
-    return true; // Default to all if none selected
   });
 
   return (

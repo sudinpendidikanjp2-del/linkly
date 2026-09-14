@@ -51,7 +51,7 @@ interface LinkTreePageProps {
   treeButtonBgImage: string;
   setTreeButtonBgImage: (v: string) => void;
   treeSavedSuccess: boolean;
-  handleSaveTree: () => Promise<void>;
+  handleSaveTree: (overrideLinks?: string[]) => Promise<void>;
   getYouTubeEmbedUrl: (url: string) => string | null;
   isLightMode: boolean;
   appTheme: keyof typeof APP_THEME_CONFIGS;
@@ -707,6 +707,7 @@ export default function LinkTreePage({
                           newLinks[index] = newLinks[index - 1];
                           newLinks[index - 1] = temp;
                           setTreeLinks(newLinks);
+                          handleSaveTree(newLinks);
                         }}
                         className={cn("p-1.5 rounded-lg transition-all cursor-pointer", isLightMode ? "hover:bg-zinc-100 text-zinc-500" : "hover:bg-zinc-800 text-zinc-400")}
                       >
@@ -723,6 +724,7 @@ export default function LinkTreePage({
                           newLinks[index] = newLinks[index + 1];
                           newLinks[index + 1] = temp;
                           setTreeLinks(newLinks);
+                          handleSaveTree(newLinks);
                         }}
                         className={cn("p-1.5 rounded-lg transition-all cursor-pointer", isLightMode ? "hover:bg-zinc-100 text-zinc-500" : "hover:bg-zinc-800 text-zinc-400")}
                       >
@@ -733,7 +735,9 @@ export default function LinkTreePage({
                       type="button"
                       title={lang === "id" ? "Hapus dari tampilan Bio" : "Remove from Bio display"}
                       onClick={() => {
-                        setTreeLinks(prev => prev.filter(id => id !== link.id));
+                        const newLinks = treeLinks.filter(id => id !== link.id);
+                        setTreeLinks(newLinks);
+                        handleSaveTree(newLinks);
                       }}
                       className={cn("p-1.5 rounded-lg transition-all cursor-pointer text-red-500 hover:bg-red-500/10")}
                     >
@@ -1218,6 +1222,7 @@ export default function LinkTreePage({
                     type="button"
                     onClick={() => {
                       setTreeLinks(modalSelectedIds);
+                      handleSaveTree(modalSelectedIds);
                       setIsAddModalOpen(false);
                     }}
                     className={cn("px-5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer shadow-md flex items-center gap-1.5", curT.bg, curT.hoverBg, "text-black")}

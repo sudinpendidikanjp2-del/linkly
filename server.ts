@@ -443,14 +443,17 @@ async function startServer() {
 
   // Bulk Import Endpoint with Slug Collision skip-logic
   app.post("/api/links/bulk-import", async (req, res) => {
-    const { userId, items } = req.body;
+    const { userId: rawUserId, items } = req.body;
 
-    if (!userId) {
+    if (!rawUserId) {
       return res.status(400).json({ error: "userId is required." });
     }
     if (!items || !Array.isArray(items)) {
       return res.status(400).json({ error: "items array is required." });
     }
+
+    const userId = await resolveUserId(rawUserId);
+    await ensureUserExists(userId);
 
     const imported: any[] = [];
     const skipped: any[] = [];
@@ -757,6 +760,32 @@ async function startServer() {
     return id;
   }
 
+  async function ensureUserExists(userId: string, defaultData?: { email?: string; name?: string; avatar?: string }) {
+    if (!userId) return userId;
+    try {
+      const existing = await prisma.user.findUnique({
+        where: { id: userId }
+      });
+      if (!existing) {
+        const fallbackEmail = defaultData?.email || `${userId}@user.app`;
+        const existingEmailUser = await prisma.user.findUnique({ where: { email: fallbackEmail } });
+        const finalEmail = existingEmailUser ? `${userId}_${Date.now()}@user.app` : fallbackEmail;
+
+        await prisma.user.create({
+          data: {
+            id: userId,
+            email: finalEmail,
+            name: defaultData?.name || `User`,
+            avatar: defaultData?.avatar || null
+          }
+        });
+      }
+    } catch (e) {
+      console.error(`ensureUserExists failed for ${userId}:`, e);
+    }
+    return userId;
+  }
+
   app.get("/api/links/registry", async (req, res) => {
     try {
       const rawUserId = req.query.userId as string;
@@ -896,6 +925,7 @@ async function startServer() {
       if (!userId) {
         return res.status(400).json({ error: "Missing or invalid userId" });
       }
+      await ensureUserExists(userId);
 
       const now = new Date();
 
@@ -1107,9 +1137,15 @@ async function startServer() {
         const resolvedId = await resolveUserId(id);
         const item = await prisma.linkTree.findUnique({ where: { id: resolvedId } });
         if (!item) return res.status(404).json({ error: "LinkTree not found" });
+        let treeLinksParsed = [];
+        try {
+          treeLinksParsed = typeof item.treeLinks === "string" ? JSON.parse(item.treeLinks) : (item.treeLinks || []);
+        } catch (e) {
+          treeLinksParsed = [];
+        }
         return res.json({
           ...item,
-          treeLinks: JSON.parse(item.treeLinks)
+          treeLinks: treeLinksParsed
         });
 
       } else if (collection === "collections") {
@@ -1171,25 +1207,37 @@ async function startServer() {
           }
         }
 
+        const fallbackEmail = data.email || `${id}@user.app`;
+        const existingEmailUser = await prisma.user.findFirst({
+          where: {
+            email: fallbackEmail,
+            NOT: { id }
+          }
+        });
+        const finalEmail = existingEmailUser ? `${id}_${Date.now()}@user.app` : fallbackEmail;
+
         const item = await prisma.user.upsert({
           where: { id },
           update: {
-            email: data.email,
-            name: data.displayName,
-            avatar: data.photoURL
+            email: finalEmail,
+            name: data.displayName || data.name,
+            avatar: data.photoURL || data.avatar
           },
           create: {
             id,
-            email: data.email,
-            name: data.displayName,
-            avatar: data.photoURL
+            email: finalEmail,
+            name: data.displayName || data.name || "User",
+            avatar: data.photoURL || data.avatar || null
           }
         });
         return res.json(item);
 
       } else if (collection === "links") {
+        const targetUserId = await resolveUserId(data.userId || id);
+        if (targetUserId) await ensureUserExists(targetUserId);
+
         const payload: any = {
-          userId: data.userId,
+          userId: targetUserId,
           originalUrl: data.originalUrl,
           shortSlug: data.shortSlug,
           customDomain: data.customDomain || null,
@@ -1220,12 +1268,19 @@ async function startServer() {
         return res.json(item);
 
       } else if (collection === "link_trees") {
+        const resolvedId = await resolveUserId(id);
+        if (resolvedId) await ensureUserExists(resolvedId);
+
+        const treeLinksStr = typeof data.treeLinks === "string"
+          ? data.treeLinks
+          : JSON.stringify(data.treeLinks || []);
+
         const payload: any = {
           treeTitle: data.treeTitle || "",
           treeBio: data.treeBio || "",
           treeAvatar: data.treeAvatar || "",
           treeTheme: data.treeTheme || "slate",
-          treeLinks: JSON.stringify(data.treeLinks || []),
+          treeLinks: treeLinksStr,
           treeBgImage: data.treeBgImage || null,
           treeButtonStyle: data.treeButtonStyle || "classic",
           treeInstagram: data.treeInstagram || null,
@@ -1240,15 +1295,29 @@ async function startServer() {
         };
 
         const item = await prisma.linkTree.upsert({
-          where: { id },
+          where: { id: resolvedId },
           update: payload,
-          create: { id, ...payload }
+          create: { id: resolvedId, ...payload }
         });
-        return res.json(item);
+
+        let treeLinksParsed = [];
+        try {
+          treeLinksParsed = JSON.parse(item.treeLinks);
+        } catch (e) {
+          treeLinksParsed = [];
+        }
+
+        return res.json({
+          ...item,
+          treeLinks: treeLinksParsed
+        });
 
       } else if (collection === "collections") {
+        const targetUserId = await resolveUserId(data.userId);
+        if (targetUserId) await ensureUserExists(targetUserId);
+
         const payload: any = {
-          userId: data.userId,
+          userId: targetUserId,
           name: data.name,
           description: data.description || null
         };
@@ -1414,11 +1483,22 @@ async function startServer() {
         orderBy: { createdAt: "desc" }
       });
 
-      // Filter active links
+      // Filter active links and preserve custom treeLinks order
       let activeLinks: any[] = [];
-      const treeLinks = linkTree?.treeLinks ? JSON.parse(linkTree.treeLinks) : [];
-      if (Array.isArray(treeLinks)) {
-        activeLinks = links.filter((l: any) => treeLinks.includes(l.id));
+      let treeLinks: string[] = [];
+      try {
+        treeLinks = linkTree?.treeLinks ? JSON.parse(linkTree.treeLinks) : [];
+      } catch (e) {
+        treeLinks = [];
+      }
+
+      if (Array.isArray(treeLinks) && treeLinks.length > 0) {
+        const linkMap = new Map(links.map((l: any) => [l.id, l]));
+        activeLinks = treeLinks
+          .map((id: string) => linkMap.get(id))
+          .filter((l: any) => Boolean(l));
+      } else {
+        activeLinks = links;
       }
 
       // Filter non-expired links

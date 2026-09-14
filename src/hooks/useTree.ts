@@ -167,8 +167,9 @@ export function useTree(user: User | null, currentTab: string, isLinkTreePath: b
     return videoId ? `https://www.youtube.com/embed/${videoId}` : null;
   };
 
-  const handleSaveTree = async () => {
+  const handleSaveTree = async (overrideLinks?: string[]) => {
     if (!user) return;
+    const linksToSave = overrideLinks !== undefined ? overrideLinks : treeLinks;
     setIsSavingTree(true);
     try {
       const treeData = {
@@ -176,7 +177,7 @@ export function useTree(user: User | null, currentTab: string, isLinkTreePath: b
         treeBio,
         treeAvatar,
         treeTheme,
-        treeLinks,
+        treeLinks: linksToSave,
         treeBgImage,
         treeButtonStyle,
         treeShowFolders,

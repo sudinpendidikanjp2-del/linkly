@@ -34,15 +34,16 @@ export default function PublicLinkTree({
   const themeName = (publicTreeSettings.treeTheme || "slate") as keyof typeof THEME_STYLES;
   const theme = THEME_STYLES[themeName] || THEME_STYLES.slate;
 
-  // Filter public links list based on owner settings
-  const activeTreeLinks = publicTreeLinks.filter(l => {
-    const isExpired = l.expiresAt && new Date(l.expiresAt) < new Date();
-    if (isExpired) return false;
-
-    if (Array.isArray(publicTreeSettings.treeLinks)) {
-      return publicTreeSettings.treeLinks.includes(l.id);
-    }
-  });
+  // Filter public links list based on owner settings and preserve custom order
+  let activeTreeLinks: LinkData[] = [];
+  if (Array.isArray(publicTreeSettings.treeLinks) && publicTreeSettings.treeLinks.length > 0) {
+    const linkMap = new Map(publicTreeLinks.map(l => [l.id, l]));
+    activeTreeLinks = publicTreeSettings.treeLinks
+      .map((id: string) => linkMap.get(id))
+      .filter((l): l is LinkData => Boolean(l) && (!l.expiresAt || new Date(l.expiresAt) > new Date()));
+  } else {
+    activeTreeLinks = publicTreeLinks.filter(l => !l.expiresAt || new Date(l.expiresAt) > new Date());
+  }
 
   return (
     <div 

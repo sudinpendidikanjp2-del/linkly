@@ -42,7 +42,7 @@ export default function PublicLinkTree({
       .map((id: string) => linkMap.get(id))
       .filter((l): l is LinkData => Boolean(l) && (!l.expiresAt || new Date(l.expiresAt) > new Date()));
   } else {
-    activeTreeLinks = publicTreeLinks.filter(l => !l.expiresAt || new Date(l.expiresAt) > new Date());
+    activeTreeLinks = [];
   }
 
   return (

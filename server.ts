@@ -1498,7 +1498,7 @@ async function startServer() {
           .map((id: string) => linkMap.get(id))
           .filter((l: any) => Boolean(l));
       } else {
-        activeLinks = links;
+        activeLinks = [];
       }
 
       // Filter non-expired links

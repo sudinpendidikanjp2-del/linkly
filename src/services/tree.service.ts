@@ -24,9 +24,7 @@ export class TreeService {
       );
       linksData = fetched.filter(Boolean) as LinkData[];
     } else {
-      const qLinks = query(collection(db, "links"), where("userId", "==", targetUid));
-      const snapLinks = await getDocs(qLinks);
-      linksData = snapLinks.docs.map(d => ({ id: d.id, ...d.data() })) as LinkData[];
+      linksData = [];
     }
 
     const activeCollectionIds = Array.from(new Set(

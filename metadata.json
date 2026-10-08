@@ -1,8 +1,0 @@
-{
-  "name": "Remix: Remix: Remix: Linkly SaaS",
-  "description": "A powerful link shortener SaaS with custom slugs, expiration, QR codes, and analytics.",
-  "requestFramePermissions": [],
-  "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
-}

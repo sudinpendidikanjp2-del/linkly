@@ -10,6 +10,8 @@ import { RESERVED_SLUGS } from "../../src/shared/constants";
 import { deriveLinkStatus } from "../../src/shared/types";
 import { disabledPage, expiredPage, landingPage, notFoundPage, passwordPage, scheduledPage } from "../pages/gates";
 import { bioPageHtml } from "../pages/bio";
+import { loadLinks, readBioData, toRefs } from "../lib/bio-data";
+import { referencedLinkIds } from "../../src/shared/bio-resolve";
 import { pickLocale } from "../pages/render";
 
 export const publicRouter = Router();
@@ -86,30 +88,10 @@ async function serveBio(req: Request, res: Response) {
   const page = await bioByHandleOrUser(param(req, "handle"));
   if (!page) return sendHtml(res, 404, notFoundPage(lang));
 
-  const now = new Date();
-  const entries = await prisma.bioLink.findMany({
-    where: {
-      pageId: page.userId,
-      link: {
-        isEnabled: true,
-        AND: [{ OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] }, { OR: [{ startsAt: null }, { startsAt: { lte: now } }] }],
-      },
-    },
-    orderBy: { position: "asc" },
-    include: { link: true },
-  });
-  const links = entries.map(({ link }) => ({
-    id: link.id,
-    title: link.title,
-    href: `/${link.slug}`,
-    folderId: link.collectionId,
-  }));
-  const folderIds = [...new Set(links.map((link) => link.folderId).filter((id): id is string => Boolean(id)))];
-  const folders = folderIds.length
-    ? await prisma.collection.findMany({ where: { id: { in: folderIds } }, select: { id: true, name: true }, orderBy: { name: "asc" } })
-    : [];
-
-  res.set("Cache-Control", "public, max-age=60").type("html").send(bioPageHtml(lang, page, links, folders));
+  const data = readBioData(page);
+  const refs = toRefs(await loadLinks(page.userId, referencedLinkIds(data.blocks, data.floaters)));
+  const origin = env.appUrl ?? `${req.protocol}://${req.get("host")}`;
+  res.set("Cache-Control", "public, max-age=60").type("html").send(bioPageHtml(lang, page, data, refs, origin));
 }
 
 publicRouter.get(["/b/:handle", "/tree/:handle", "/lt/:handle", "/t/:handle"], asyncHandler(async (req, res) => serveBio(req, res)));

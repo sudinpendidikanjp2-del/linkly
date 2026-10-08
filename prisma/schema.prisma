@@ -49,7 +49,6 @@ model Link {
   user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   collection Collection? @relation(fields: [collectionId], references: [id], onDelete: SetNull)
   clicks     Click[]
-  bioLinks   BioLink[]
 
   @@index([userId, createdAt])
   @@index([collectionId])
@@ -88,33 +87,28 @@ model Collection {
 }
 
 model BioPage {
-  userId      String   @id
-  handle      String   @unique
-  title       String
-  bio         String?
-  avatarUrl   String?
-  bgImageUrl  String?
-  theme       String   @default("slate")
-  buttonStyle String   @default("classic")
-  videoUrl    String?
-  showFolders Boolean  @default(true)
-  socials     Json     @default("{}")
-  updatedAt   DateTime @updatedAt
+  userId         String   @id
+  handle         String   @unique
+  title          String
+  bio            String?
+  avatarUrl      String?
+  theme          String   @default("slate")
+  buttonStyle    String   @default("classic")
+  showFolders    Boolean  @default(true)
+  showBranding   Boolean  @default(true)
+  socials        Json     @default("{}")
+  /// Appearance overrides, validated by designSchema.
+  design         Json     @default("{}")
+  /// Ordered content blocks (link, button, image, video, heading, text, divider).
+  blocks         Json     @default("[]")
+  /// Floating images, shapes and buttons.
+  floaters       Json     @default("[]")
+  seoTitle       String?
+  seoDescription String?
+  ogImageUrl     String?
+  updatedAt      DateTime @updatedAt
 
-  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  links BioLink[]
-}
-
-model BioLink {
-  pageId   String
-  linkId   String
-  position Int
-
-  page BioPage @relation(fields: [pageId], references: [userId], onDelete: Cascade)
-  link Link    @relation(fields: [linkId], references: [id], onDelete: Cascade)
-
-  @@id([pageId, linkId])
-  @@index([pageId, position])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model AppSettings {

@@ -1,5 +1,5 @@
-import type { BioPage, Collection, Link, User } from "@prisma/client";
-import type { BioDTO, CollectionDTO, LinkDTO, UserDTO } from "../../src/shared/types";
+import type { Collection, Link, User } from "@prisma/client";
+import type { CollectionDTO, LinkDTO, UserDTO } from "../../src/shared/types";
 import { deriveLinkStatus } from "../../src/shared/types";
 
 type LinkWithCollection = Link & { collection?: Pick<Collection, "name"> | null };
@@ -51,23 +51,3 @@ export function toCollectionDTO(
   };
 }
 
-type BioWithLinks = BioPage & { links: { linkId: string; position: number; link: LinkWithCollection }[] };
-
-export function toBioDTO(page: BioWithLinks): BioDTO {
-  const ordered = [...page.links].sort((a, b) => a.position - b.position);
-  return {
-    handle: page.handle,
-    title: page.title,
-    bio: page.bio,
-    avatarUrl: page.avatarUrl,
-    bgImageUrl: page.bgImageUrl,
-    theme: page.theme,
-    buttonStyle: page.buttonStyle,
-    videoUrl: page.videoUrl,
-    showFolders: page.showFolders,
-    socials: (page.socials ?? {}) as BioDTO["socials"],
-    linkIds: ordered.map((entry) => entry.linkId),
-    links: ordered.map((entry) => toLinkDTO(entry.link)),
-    published: true,
-  };
-}

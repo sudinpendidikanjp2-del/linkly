@@ -1,4 +1,4 @@
-import type { SocialKey } from "./schemas";
+import type { Block, Design, Floater, SocialKey } from "./bio-schema";
 
 export type LinkStatus = "active" | "disabled" | "scheduled" | "expired";
 
@@ -92,14 +92,18 @@ export interface BioDTO {
   title: string;
   bio: string | null;
   avatarUrl: string | null;
-  bgImageUrl: string | null;
   theme: string;
   buttonStyle: string;
-  videoUrl: string | null;
   showFolders: boolean;
+  showBranding: boolean;
   socials: Partial<Record<SocialKey, string>>;
-  linkIds: string[];
-  /** Selected links in display order. */
+  design: Design;
+  blocks: Block[];
+  floaters: Floater[];
+  seoTitle: string | null;
+  seoDescription: string | null;
+  ogImageUrl: string | null;
+  /** Every link the blocks and floating elements refer to, so the editor can show their titles. */
   links: LinkDTO[];
   published: boolean;
 }

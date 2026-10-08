@@ -1,6 +1,6 @@
 # Linkly
 
-Pemendek tautan lengkap: alamat pendek kustom, kode QR yang terlacak, statistik klik, koleksi, dan halaman bio publik. Antarmuka dua bahasa (Indonesia, Inggris), mode terang dan gelap.
+Pemendek tautan lengkap: alamat pendek kustom, kode QR yang terlacak, statistik klik, koleksi, dan halaman bio publik (blok konten, gambar, video, elemen melayang, tema dan warna kustom). Antarmuka dua bahasa (Indonesia, Inggris), mode terang dan gelap.
 
 ## Stack
 

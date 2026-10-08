@@ -1,20 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useEffect, useMemo } from "react";
+import { get, useForm, type FieldErrors, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowDownIcon, ArrowUpIcon, CheckIcon, ExternalLinkIcon, LoaderCircleIcon, PlusIcon, XIcon } from "lucide-react";
+import { CheckIcon, ExternalLinkIcon, LoaderCircleIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { CopyButton } from "@/components/copy-button";
 import { PageHeader } from "@/components/page-header";
 import { ErrorState } from "@/components/states";
@@ -23,14 +21,18 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useI18n } from "@/i18n";
 import { HANDLE_PATTERN } from "@/shared/constants";
-import { BIO_BUTTON_STYLES, BIO_THEME_IDS, SOCIAL_KEYS, bioSchema, type BioInput } from "@/shared/schemas";
-import { BIO_THEMES } from "@/shared/bio-themes";
+import { SOCIAL_KEYS, bioSchema, type BioInput, type BioParsed, type DesignInput } from "@/shared/bio-schema";
 import type { BioDTO, LinkDTO } from "@/shared/types";
-import { useLinkList } from "@/features/links/api";
 import { checkHandle, useBio, useSaveBio } from "./api";
-import { BioPreview } from "./bio-preview";
+import { BlocksEditor } from "./blocks-editor";
+import { DesignEditor } from "./design-editor";
+import { FloatersEditor } from "./floaters-editor";
+import { TextField, UrlField } from "./fields";
+import { BioPreview } from "./preview";
 
 const SOCIAL_LABEL: Record<(typeof SOCIAL_KEYS)[number], string> = { instagram: "Instagram", twitter: "X", linkedin: "LinkedIn", youtube: "YouTube", github: "GitHub" };
+
+type BioForm = UseFormReturn<BioInput, unknown, BioParsed>;
 
 function toFormValues(bio: BioDTO): BioInput {
   return {
@@ -38,77 +40,52 @@ function toFormValues(bio: BioDTO): BioInput {
     title: bio.title,
     bio: bio.bio ?? "",
     avatarUrl: bio.avatarUrl ?? "",
-    bgImageUrl: bio.bgImageUrl ?? "",
     theme: bio.theme as BioInput["theme"],
     buttonStyle: bio.buttonStyle as BioInput["buttonStyle"],
-    videoUrl: bio.videoUrl ?? "",
     showFolders: bio.showFolders,
+    showBranding: bio.showBranding,
     socials: bio.socials,
-    linkIds: bio.linkIds,
+    design: bio.design as DesignInput,
+    blocks: bio.blocks,
+    floaters: bio.floaters,
+    seoTitle: bio.seoTitle ?? "",
+    seoDescription: bio.seoDescription ?? "",
+    ogImageUrl: bio.ogImageUrl ?? "",
   };
 }
 
-function BioEditor({ bio }: { bio: BioDTO }) {
-  const { t, te } = useI18n();
-  const save = useSaveBio();
-  const desktop = useMediaQuery("(min-width: 1024px)");
-  const form = useForm<BioInput>({ resolver: zodResolver(bioSchema), defaultValues: toFormValues(bio) });
-  const { control, watch, setValue, handleSubmit, setError, reset, formState } = form;
+/** Collects `{ "target.url": "invalid_url" }` style codes for one array item. */
+function errorsFor(errors: FieldErrors<BioInput>, list: "blocks" | "floaters", index: number): Record<string, string> {
+  const node = get(errors, `${list}.${index}`) as Record<string, unknown> | undefined;
+  const out: Record<string, string> = {};
+  const walk = (value: unknown, path: string) => {
+    if (!value || typeof value !== "object") return;
+    const entry = value as { message?: unknown; [key: string]: unknown };
+    if (typeof entry.message === "string" && path) out[path] = entry.message;
+    for (const [key, child] of Object.entries(entry)) {
+      if (key === "message" || key === "type" || key === "ref") continue;
+      walk(child, path ? `${path}.${key}` : key);
+    }
+  };
+  walk(node, "");
+  return out;
+}
 
-  const [linkSearch, setLinkSearch] = useState("");
-  const debouncedSearch = useDebouncedValue(linkSearch, 300);
-  const available = useLinkList({ page: 1, pageSize: 50, search: debouncedSearch, status: "all", collectionId: "all", protected: "all", sort: "createdAt", order: "desc" });
-
-  const values = watch();
-  const linkIds = values.linkIds ?? [];
-
-  const known = useMemo(() => {
-    const map = new Map<string, LinkDTO>();
-    for (const link of bio.links) map.set(link.id, link);
-    for (const link of available.data?.items ?? []) map.set(link.id, link);
-    return map;
-  }, [bio.links, available.data]);
-
-  const selectedLinks = linkIds.map((id) => known.get(id)).filter((link): link is LinkDTO => Boolean(link));
-  const addable = (available.data?.items ?? []).filter((link) => !linkIds.includes(link.id));
-
-  const handle = (values.handle ?? "").trim().toLowerCase();
+function ProfileCard({ form, bio }: { form: BioForm; bio: BioDTO }) {
+  const { t } = useI18n();
+  const { control, watch } = form;
+  const handle = (watch("handle") ?? "").trim().toLowerCase();
   const debouncedHandle = useDebouncedValue(handle, 400);
-  const handleCheck = useQuery({
+  const check = useQuery({
     queryKey: ["handle-check", debouncedHandle],
     queryFn: () => checkHandle(debouncedHandle),
     enabled: HANDLE_PATTERN.test(debouncedHandle) && debouncedHandle !== bio.handle,
     staleTime: 10_000,
   });
+  const socials = watch("socials") ?? {};
 
-  useEffect(() => {
-    reset(toFormValues(bio));
-  }, [bio, reset]);
-
-  function move(index: number, direction: -1 | 1) {
-    const next = [...linkIds];
-    const target = index + direction;
-    if (target < 0 || target >= next.length) return;
-    [next[index], next[target]] = [next[target], next[index]];
-    setValue("linkIds", next, { shouldDirty: true });
-  }
-
-  const onSubmit = handleSubmit(async (input) => {
-    try {
-      await save.mutateAsync(input);
-      toast.success(t("bio.saved"));
-    } catch (error) {
-      if (error instanceof ApiError && error.fields) {
-        for (const [field, message] of Object.entries(error.fields)) setError(field as keyof BioInput, { type: "server", message });
-      }
-      toast.error(te(error instanceof ApiError ? error.code : undefined));
-    }
-  });
-
-  const publicUrl = `${window.location.origin}/b/${bio.handle}`;
-
-  const editor = (
-    <div className="grid gap-6">
+  return (
+    <>
       <Card>
         <CardHeader>
           <CardTitle>{t("bio.profile")}</CardTitle>
@@ -126,10 +103,10 @@ function BioEditor({ bio }: { bio: BioDTO }) {
                     <input {...field} className="h-10 min-w-0 flex-1 bg-transparent px-3 font-mono text-sm outline-none" autoComplete="off" autoCapitalize="off" spellCheck={false} maxLength={30} />
                   </FormControl>
                 </div>
-                {handleCheck.isFetching ? (
+                {check.isFetching ? (
                   <p className="text-[13px] text-muted-foreground">{t("bio.handleChecking")}</p>
-                ) : handleCheck.data && handle === debouncedHandle && handle !== bio.handle ? (
-                  handleCheck.data.available ? (
+                ) : check.data && handle === debouncedHandle && handle !== bio.handle ? (
+                  check.data.available ? (
                     <p className="flex items-center gap-1 text-[13px] font-medium text-success-text">
                       <CheckIcon className="size-3.5" /> {t("bio.handleAvailable")}
                     </p>
@@ -188,188 +165,147 @@ function BioEditor({ bio }: { bio: BioDTO }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>{t("bio.appearance")}</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-6">
-          <FormField
-            control={control}
-            name="theme"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel id="bio-theme-label">{t("bio.theme")}</FormLabel>
-                <RadioGroup value={field.value} onValueChange={field.onChange} aria-labelledby="bio-theme-label" className="grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-3 xl:grid-cols-5">
-                  {BIO_THEME_IDS.map((id) => {
-                    const theme = BIO_THEMES[id];
-                    return (
-                      <label key={id} className="relative flex cursor-pointer flex-col gap-2 rounded-lg border p-2 transition-colors has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/40 has-[[data-state=checked]]:border-brand has-[[data-state=checked]]:bg-brand-soft">
-                        <RadioGroupItem value={id} className="sr-only" aria-label={t("bio.themeLabel", { name: theme.label })} />
-                        <span className="flex h-10 items-end gap-1 rounded-md p-1.5" style={{ background: theme.bg, border: `1px solid ${theme.border}` }} aria-hidden="true">
-                          <span className="h-2 w-6 rounded-sm" style={{ background: theme.fg }} />
-                          <span className="size-2.5 rounded-full" style={{ background: theme.accent }} />
-                        </span>
-                        <span className="text-[13px] font-medium">{theme.label}</span>
-                      </label>
-                    );
-                  })}
-                </RadioGroup>
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={control}
-            name="buttonStyle"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("bio.buttonStyle")}</FormLabel>
-                <div className="-mx-1 overflow-x-auto px-1 pb-1">
-                  <ToggleGroup type="single" value={field.value} onValueChange={(next) => next && field.onChange(next)} aria-label={t("bio.buttonStyle")}>
-                    {BIO_BUTTON_STYLES.map((style) => (
-                      <ToggleGroupItem key={style} value={style}>
-                        {t(`bio.style${style.charAt(0).toUpperCase()}${style.slice(1)}` as "bio.styleClassic")}
-                      </ToggleGroupItem>
-                    ))}
-                  </ToggleGroup>
-                </div>
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={control}
-            name="bgImageUrl"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("bio.bgImage")}</FormLabel>
-                <FormControl>
-                  <Input {...field} value={field.value ?? ""} type="text" inputMode="url" placeholder="https://" autoComplete="off" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={control}
-            name="videoUrl"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("bio.video")}</FormLabel>
-                <FormControl>
-                  <Input {...field} value={field.value ?? ""} type="text" inputMode="url" placeholder="https://youtube.com/watch?v=" autoComplete="off" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={control}
-            name="showFolders"
-            render={({ field }) => (
-              <FormItem className="flex flex-row items-center justify-between gap-4 rounded-lg border p-3">
-                <FormLabel className="leading-snug">{t("bio.showFolders")}</FormLabel>
-                <FormControl>
-                  <Switch checked={field.value} onCheckedChange={field.onChange} />
-                </FormControl>
-              </FormItem>
-            )}
-          />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
           <CardTitle>{t("bio.socials")}</CardTitle>
           <CardDescription>{t("bio.socialHint")}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           {SOCIAL_KEYS.map((key) => (
-            <div key={key} className="grid gap-2">
-              <Label htmlFor={`social-${key}`}>{SOCIAL_LABEL[key]}</Label>
-              <Input
-                id={`social-${key}`}
-                value={values.socials?.[key] ?? ""}
-                onChange={(event) => setValue("socials", { ...values.socials, [key]: event.target.value }, { shouldDirty: true })}
-                autoComplete="off"
-                autoCapitalize="off"
-                spellCheck={false}
-                maxLength={200}
-                placeholder="@username"
-              />
-            </div>
+            <TextField key={key} label={SOCIAL_LABEL[key]} value={socials[key] ?? ""} placeholder="@username" maxLength={200} onChange={(value) => form.setValue("socials", { ...socials, [key]: value }, { shouldDirty: true })} />
           ))}
         </CardContent>
       </Card>
+    </>
+  );
+}
 
+function PageSettingsCard({ form }: { form: BioForm }) {
+  const { t } = useI18n();
+  const values = form.watch();
+  const set = (patch: Partial<BioInput>) => {
+    for (const [key, value] of Object.entries(patch)) form.setValue(key as keyof BioInput, value as never, { shouldDirty: true });
+  };
+  const errors = form.formState.errors;
+  return (
+    <div className="grid gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>{t("bio.links")}</CardTitle>
-          <CardDescription>{t("bio.linksHint")}</CardDescription>
+          <CardTitle>{t("bioEditor.seoTitle")}</CardTitle>
+          <CardDescription>{t("bioEditor.seoHint")}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-5">
-          {selectedLinks.length > 0 ? (
-            <div className="grid gap-2">
-              <p className="text-[13px] font-medium text-muted-foreground">{t("bio.shown", { count: selectedLinks.length })}</p>
-              <ol className="divide-y rounded-lg border">
-                {selectedLinks.map((link, index) => (
-                  <li key={link.id} className="flex items-center gap-2 p-2 pl-3">
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">{link.title}</span>
-                      <span className="block truncate font-mono text-[13px] text-muted-foreground">/{link.slug}</span>
-                    </span>
-                    <Button type="button" variant="ghost" size="icon-sm" disabled={index === 0} aria-label={t("bio.moveUp", { title: link.title })} onClick={() => move(index, -1)}>
-                      <ArrowUpIcon />
-                    </Button>
-                    <Button type="button" variant="ghost" size="icon-sm" disabled={index === selectedLinks.length - 1} aria-label={t("bio.moveDown", { title: link.title })} onClick={() => move(index, 1)}>
-                      <ArrowDownIcon />
-                    </Button>
-                    <Button type="button" variant="ghost" size="icon-sm" aria-label={`${t("common.remove")}: ${link.title}`} onClick={() => setValue("linkIds", linkIds.filter((id) => id !== link.id), { shouldDirty: true })}>
-                      <XIcon />
-                    </Button>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          ) : null}
-
+          <TextField label={t("bioEditor.seoPageTitle")} value={values.seoTitle ?? ""} onChange={(seoTitle) => set({ seoTitle })} maxLength={70} placeholder={values.title} />
           <div className="grid gap-2">
-            <Label htmlFor="bio-link-search">{t("bio.linksSearch")}</Label>
-            <Input id="bio-link-search" type="search" value={linkSearch} onChange={(event) => setLinkSearch(event.target.value)} />
-            <div className="max-h-64 overflow-y-auto rounded-lg border">
-              {available.isPending ? (
-                <div className="grid gap-2 p-3" aria-busy="true">
-                  <Skeleton className="h-9" />
-                  <Skeleton className="h-9" />
-                </div>
-              ) : addable.length === 0 ? (
-                <p className="p-4 text-center text-sm text-muted-foreground">{available.data?.total === 0 && !debouncedSearch ? t("bio.linksEmpty") : t("collections.linksEmpty")}</p>
-              ) : (
-                <ul className="divide-y">
-                  {addable.map((link) => (
-                    <li key={link.id}>
-                      <button
-                        type="button"
-                        className="press flex min-h-11 w-full items-center gap-3 px-3 py-2 text-left hover:bg-muted/60 focus-visible:bg-muted/60"
-                        onClick={() => setValue("linkIds", [...linkIds, link.id], { shouldDirty: true })}
-                      >
-                        <PlusIcon className="size-4 shrink-0 text-muted-foreground" />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-medium">{link.title}</span>
-                          <span className="block truncate font-mono text-[13px] text-muted-foreground">/{link.slug}</span>
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+            <Label htmlFor="seo-description">{t("bioEditor.seoDescription")}</Label>
+            <Textarea id="seo-description" rows={3} maxLength={160} value={values.seoDescription ?? ""} onChange={(event) => set({ seoDescription: event.target.value })} placeholder={values.bio ?? ""} />
           </div>
+          <UrlField label={t("bioEditor.ogImage")} value={values.ogImageUrl ?? ""} onChange={(ogImageUrl) => set({ ogImageUrl })} error={errors.ogImageUrl?.message} hint={t("bioEditor.ogImageHint")} />
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent className="flex items-center justify-between gap-4">
+          <div className="grid gap-0.5">
+            <Label htmlFor="branding">{t("bioEditor.branding")}</Label>
+            <p className="text-[13px] text-muted-foreground">{t("bioEditor.brandingHint")}</p>
+          </div>
+          <Switch id="branding" checked={values.showBranding ?? true} onCheckedChange={(showBranding) => set({ showBranding })} />
         </CardContent>
       </Card>
     </div>
   );
+}
 
-  const preview = (
-    <div className="grid gap-4">
-      <BioPreview values={values} links={selectedLinks} />
-    </div>
+function BioEditor({ bio }: { bio: BioDTO }) {
+  const { t, te } = useI18n();
+  const save = useSaveBio();
+  const desktop = useMediaQuery("(min-width: 1024px)");
+  const form = useForm<BioInput, unknown, BioParsed>({ resolver: zodResolver(bioSchema), defaultValues: toFormValues(bio) });
+  const { handleSubmit, setError, reset, setValue, watch, formState } = form;
+
+  useEffect(() => {
+    reset(toFormValues(bio));
+  }, [bio, reset]);
+
+  const values = watch() as BioInput;
+
+  // Titles for every link the page refers to: those the server sent plus the ones picked in this session.
+  const links = useMemo(() => new Map<string, LinkDTO>(bio.links.map((link) => [link.id, link])), [bio.links]);
+  const pickedLinks = useMemo(() => new Map(links), [links]);
+  const known = useKnownLinks(values, pickedLinks);
+
+  const onSubmit = handleSubmit(
+    async (input) => {
+      try {
+        await save.mutateAsync(input as unknown as BioInput);
+        toast.success(t("bio.saved"));
+      } catch (error) {
+        if (error instanceof ApiError && error.fields) {
+          for (const [field, message] of Object.entries(error.fields)) setError(field as never, { type: "server", message });
+        }
+        toast.error(te(error instanceof ApiError ? error.code : undefined));
+      }
+    },
+    () => toast.error(te("validation_error")),
+  );
+
+  const publicUrl = `${window.location.origin}/b/${bio.handle}`;
+  const design = (values.design ?? {}) as DesignInput;
+
+  const tabs = (
+    <Tabs defaultValue="content" className="min-w-0">
+      <div className="-mx-1 overflow-x-auto px-1 pb-1">
+        <TabsList>
+          <TabsTrigger value="content">{t("bioEditor.tabContent")}</TabsTrigger>
+          <TabsTrigger value="design">{t("bioEditor.tabDesign")}</TabsTrigger>
+          <TabsTrigger value="floating">{t("bioEditor.tabFloating")}</TabsTrigger>
+          <TabsTrigger value="page">{t("bioEditor.tabPage")}</TabsTrigger>
+          {!desktop ? <TabsTrigger value="preview">{t("bio.tabPreview")}</TabsTrigger> : null}
+        </TabsList>
+      </div>
+
+      <TabsContent value="content" className="grid gap-6">
+        <ProfileCard form={form} bio={bio} />
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("bioEditor.blocksTitle")}</CardTitle>
+            <CardDescription>{t("bioEditor.blocksDesc")}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <BlocksEditor blocks={values.blocks ?? []} onChange={(blocks) => setValue("blocks", blocks, { shouldDirty: true, shouldValidate: formState.isSubmitted })} links={known} errorsAt={(index) => errorsFor(formState.errors, "blocks", index)} />
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+      <TabsContent value="design">
+        <DesignEditor
+          values={values}
+          design={design}
+          onDesign={(patch) => setValue("design", { ...design, ...patch }, { shouldDirty: true })}
+          onField={(patch) => Object.entries(patch).forEach(([key, value]) => setValue(key as keyof BioInput, value as never, { shouldDirty: true }))}
+        />
+      </TabsContent>
+
+      <TabsContent value="floating">
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("bioEditor.floatTitle")}</CardTitle>
+            <CardDescription>{t("bioEditor.floatDesc")}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <FloatersEditor floaters={values.floaters ?? []} onChange={(floaters) => setValue("floaters", floaters, { shouldDirty: true, shouldValidate: formState.isSubmitted })} links={known} errorsAt={(index) => errorsFor(formState.errors, "floaters", index)} />
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+      <TabsContent value="page">
+        <PageSettingsCard form={form} />
+      </TabsContent>
+
+      {!desktop ? (
+        <TabsContent value="preview">
+          <BioPreview values={values} links={known} />
+        </TabsContent>
+      ) : null}
+    </Tabs>
   );
 
   return (
@@ -407,24 +343,43 @@ function BioEditor({ bio }: { bio: BioDTO }) {
 
         {desktop ? (
           <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_380px]">
-            {editor}
-            <div className="sticky top-8">{preview}</div>
+            {tabs}
+            <div className="sticky top-8">
+              <BioPreview values={values} links={known} />
+            </div>
           </div>
         ) : (
-          <Tabs defaultValue="edit">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="edit">{t("bio.tabEdit")}</TabsTrigger>
-              <TabsTrigger value="preview">{t("bio.tabPreview")}</TabsTrigger>
-            </TabsList>
-            <TabsContent value="edit" forceMount className="data-[state=inactive]:hidden">
-              {editor}
-            </TabsContent>
-            <TabsContent value="preview">{preview}</TabsContent>
-          </Tabs>
+          tabs
         )}
       </form>
     </Form>
   );
+}
+
+import { useQueries } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+
+/**
+ * Link titles are needed for rows the user just picked, which the server has not sent yet.
+ * Missing ids are fetched once and merged into the map.
+ */
+function useKnownLinks(values: BioInput, base: Map<string, LinkDTO>): Map<string, LinkDTO> {
+  const wanted = new Set<string>();
+  for (const block of values.blocks ?? []) {
+    if (block.type === "link" && block.linkId) wanted.add(block.linkId);
+    if ((block.type === "button" || block.type === "image") && block.target?.kind === "link" && block.target.linkId) wanted.add(block.target.linkId);
+  }
+  for (const floater of values.floaters ?? []) if (floater.target?.kind === "link" && floater.target.linkId) wanted.add(floater.target.linkId);
+  const missing = [...wanted].filter((id) => !base.has(id));
+  const results = useQueries({
+    queries: missing.map((id) => ({ queryKey: ["links", "detail", id], queryFn: () => api<LinkDTO>(`/links/${id}`), staleTime: 60_000, retry: false })),
+  });
+  return useMemo(() => {
+    const map = new Map(base);
+    for (const result of results) if (result.data) map.set(result.data.id, result.data);
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [base, results.map((result) => result.data?.id).join(",")]);
 }
 
 export default function BioPage() {

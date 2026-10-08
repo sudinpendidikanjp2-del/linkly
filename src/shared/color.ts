@@ -17,3 +17,17 @@ export function contrastRatio(a: string, b: string): number {
   const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x);
   return (light + 0.05) / (dark + 0.05);
 }
+
+/** Picks black or white text, whichever reads better on the given background. */
+export function readableOn(background: string): "#000000" | "#ffffff" {
+  return contrastRatio("#000000", background) >= contrastRatio("#ffffff", background) ? "#000000" : "#ffffff";
+}
+
+/** Mixes two hex colours; `amount` is the share of `b` (0-1). */
+export function mixHex(a: string, b: string, amount: number): string {
+  const parse = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const [ar, ag, ab] = parse(a);
+  const [br, bg, bb] = parse(b);
+  const to = (x: number, y: number) => Math.round(x + (y - x) * amount).toString(16).padStart(2, "0");
+  return `#${to(ar, br)}${to(ag, bg)}${to(ab, bb)}`;
+}

@@ -40,6 +40,7 @@ export function renderDocument(options: {
   body: ReactNode;
   noindex?: boolean;
   description?: string;
+  head?: ReactNode;
 }): string {
   const html = renderToStaticMarkup(
     <html lang={options.lang}>
@@ -49,6 +50,7 @@ export function renderDocument(options: {
         {options.noindex ? <meta name="robots" content="noindex, nofollow" /> : null}
         {options.description ? <meta name="description" content={options.description} /> : null}
         <title>{options.title}</title>
+        {options.head}
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
         <style dangerouslySetInnerHTML={{ __html: options.css }} />
       </head>

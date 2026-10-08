@@ -1,47 +1,36 @@
-version: '3.8'
-
 services:
   web:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: linktree-app:latest
-    container_name: linktree-web
+    build: .
+    image: linkly:latest
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=production
-      # Connecting to the local docker postgres service
-      - DATABASE_URL=postgresql://postgres:postgres_secure_pass@db:5432/linktree_db?sslmode=disable
-      - SQL_USER=postgres
-      - SQL_PASSWORD=postgres_secure_pass
-      - SQL_DB_NAME=linktree_db
-      - SQL_HOST=db
-      # Add other environment secrets here (e.g., GEMINI_API_KEY)
+      NODE_ENV: production
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-change-me}@db:5432/linkly
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in your environment or .env}
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
     depends_on:
       db:
         condition: service_healthy
-    restart: always
+    restart: unless-stopped
 
   db:
     image: postgres:16-alpine
-    container_name: linktree-postgres
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres_secure_pass
-      - POSTGRES_DB=linktree_db
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_DB: linkly
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init-db.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d linktree_db"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d linkly"]
       interval: 3s
       timeout: 3s
       retries: 10
-    restart: always
+    restart: unless-stopped
 
 volumes:
   pgdata:
-    driver: local

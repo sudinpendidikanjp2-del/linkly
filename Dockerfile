@@ -48,7 +48,6 @@ USER node
 # Copy package manifests, prisma schema, and scripts with correct ownership
 COPY --chown=node:node package.json package-lock.json ./
 COPY --chown=node:node prisma ./prisma/
-COPY --chown=node:node scripts ./scripts/
 
 # Install only production dependencies
 RUN npm ci --only=production

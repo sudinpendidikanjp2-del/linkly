@@ -7,67 +7,74 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum Role {
+  USER
+  ADMIN
+}
+
 model User {
-  id        String   @id // Google user ID or email
-  email     String   @unique
-  name      String?
-  avatar    String?
-  createdAt DateTime @default(now())
-  
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  avatarUrl    String?
+  passwordHash String?
+  googleId     String?  @unique
+  role         Role     @default(USER)
+  createdAt    DateTime @default(now())
+
   links       Link[]
   collections Collection[]
-  clicks      Click[]
-  linkTree    LinkTree?
+  bioPage     BioPage?
 }
 
 model Link {
-  id                 String   @id @default(uuid())
+  id                 String    @id @default(cuid())
   userId             String
-  originalUrl        String
-  shortSlug          String   @unique
-  customDomain       String?
-  clickCount         Int      @default(0)
-  qrScanCount        Int      @default(0)
   collectionId       String?
-  createdAt          DateTime @default(now())
-  expiresAt          DateTime?
-  activatedAt        DateTime?
   title              String
-  password           String?
-  landingEnabled     Boolean  @default(false)
+  originalUrl        String
+  slug               String    @unique
+  passwordHash       String?
+  isEnabled          Boolean   @default(true)
+  startsAt           DateTime?
+  expiresAt          DateTime?
+  landingEnabled     Boolean   @default(false)
   landingDescription String?
-  landingAvatar      String?
-  isEnabled          Boolean  @default(true)
-  category           String?
+  landingImageUrl    String?
+  clickCount         Int       @default(0)
+  qrScanCount        Int       @default(0)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   collection Collection? @relation(fields: [collectionId], references: [id], onDelete: SetNull)
   clicks     Click[]
+
+  @@index([userId, createdAt])
+  @@index([collectionId])
 }
 
 model Click {
-  id         String   @id @default(uuid())
-  linkId     String
-  userId     String
-  timestamp  DateTime @default(now())
-  shortSlug  String
-  title      String
-  ip         String?
-  country    String?
-  region     String?
-  city       String?
-  device     String?
-  os         String?
-  browser    String?
-  referrer   String?
-  isQrScan   Boolean  @default(false)
+  id          String   @id @default(cuid())
+  linkId      String
+  timestamp   DateTime @default(now())
+  country     String?
+  city        String?
+  device      String?
+  os          String?
+  browser     String?
+  referrer    String?
+  visitorHash String?
+  isQrScan    Boolean  @default(false)
 
   link Link @relation(fields: [linkId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([linkId, timestamp])
+  @@index([timestamp])
 }
 
 model Collection {
-  id          String   @id @default(uuid())
+  id          String   @id @default(cuid())
   userId      String
   name        String
   description String?
@@ -75,31 +82,36 @@ model Collection {
 
   user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   links Link[]
+
+  @@index([userId])
 }
 
-model LinkTree {
-  id                String   @id // userId
-  treeTitle         String
-  treeBio           String?
-  treeAvatar        String?
-  treeTheme         String   @default("slate")
-  treeLinks         String   @default("[]") // JSON string representation of string[]
-  treeBgImage       String?
-  treeButtonStyle   String   @default("classic")
-  treeInstagram     String?
-  treeTwitter       String?
-  treeLinkedIn      String?
-  treeYoutube       String?
-  treeGithub        String?
-  treeVideoUrl      String?
-  treeButtonBgImage String?
-  treeShowFolders   Boolean  @default(true)
-  updatedAt         DateTime @default(now())
+model BioPage {
+  userId         String   @id
+  handle         String   @unique
+  title          String
+  bio            String?
+  avatarUrl      String?
+  theme          String   @default("slate")
+  buttonStyle    String   @default("classic")
+  showFolders    Boolean  @default(true)
+  showBranding   Boolean  @default(true)
+  socials        Json     @default("{}")
+  /// Appearance overrides, validated by designSchema.
+  design         Json     @default("{}")
+  /// Ordered content blocks (link, button, image, video, heading, text, divider).
+  blocks         Json     @default("[]")
+  /// Floating images, shapes and buttons.
+  floaters       Json     @default("[]")
+  seoTitle       String?
+  seoDescription String?
+  ogImageUrl     String?
+  updatedAt      DateTime @updatedAt
 
-  user User @relation(fields: [id], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-model GlobalSettings {
+model AppSettings {
   id                  String  @id @default("default")
   registrationEnabled Boolean @default(true)
 }

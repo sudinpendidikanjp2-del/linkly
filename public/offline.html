@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Linkly | Offline</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+:root{--bg:#f7f7f5;--card:#fff;--fg:#17181c;--muted:#5b5f6a;--border:#e2e1dc;--accent:#0f766e;--accent-fg:#fff}
+@media (prefers-color-scheme:dark){:root{--bg:#0e0f12;--card:#15161a;--fg:#f2f3f5;--muted:#9ca1ad;--border:#272a31;--accent:#2dd4bf;--accent-fg:#042f2c}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100dvh;display:grid;place-items:center;padding:max(24px,env(safe-area-inset-top)) 16px max(24px,env(safe-area-inset-bottom));background:var(--bg);color:var(--fg);font:16px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{width:100%;max-width:400px;background:var(--card);border:1px solid var(--border);border-radius:20px;padding:32px 28px;display:grid;gap:16px}
+h1{margin:0;font-size:24px;letter-spacing:-.02em}
+p{margin:0;color:var(--muted)}
+button{height:48px;border:0;border-radius:12px;background:var(--accent);color:var(--accent-fg);font:600 16px/1 inherit;cursor:pointer}
+button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Anda sedang offline</h1>
+  <p>Linkly butuh koneksi untuk memuat tautan dan statistik. Sambungkan kembali ke internet, lalu coba lagi.</p>
+  <button type="button" onclick="location.reload()">Coba lagi</button>
+</main>
+</body>
+</html>

@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router";
 import { LoaderCircleIcon } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/providers/auth";
@@ -24,8 +24,13 @@ function Splash() {
 
 function RequireAuth() {
   const { user, loading } = useAuth();
+  const location = useLocation();
   if (loading) return <Splash />;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) {
+    // Remember where the visitor was heading (including shared links from the Android share sheet).
+    const next = `${location.pathname}${location.search}`;
+    return <Navigate to={next === "/" ? "/login" : `/login?next=${encodeURIComponent(next)}`} replace />;
+  }
   return <AppShell />;
 }
 

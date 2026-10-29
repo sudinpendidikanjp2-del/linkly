@@ -189,7 +189,7 @@ function BlockFields({ block, errors, links, onChange }: { block: BlockInput; er
       body = (
         <>
           <LinkPicker label={t("bioEditor.blockLink")} value={block.linkId} selected={links.get(block.linkId)} onChange={(link) => set({ linkId: link.id })} error={errors.linkId} />
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <TextField label={t("bioEditor.emoji")} value={block.emoji ?? ""} onChange={(emoji) => set({ emoji })} maxLength={8} hint={t("bioEditor.emojiHint")} />
             <UrlField label={t("bioEditor.thumbnail")} value={block.thumbnailUrl ?? ""} onChange={(thumbnailUrl) => set({ thumbnailUrl })} error={errors.thumbnailUrl} />
           </div>
@@ -202,7 +202,7 @@ function BlockFields({ block, errors, links, onChange }: { block: BlockInput; er
         <>
           <TextField label={t("bioEditor.buttonLabel")} value={block.label} onChange={(label) => set({ label })} error={errors.label} maxLength={60} />
           <TargetPicker label={t("bioEditor.buttonTarget")} required value={block.target as TargetValue} onChange={(target) => set({ target })} links={links} error={targetError} />
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <TextField label={t("bioEditor.emoji")} value={block.emoji ?? ""} onChange={(emoji) => set({ emoji })} maxLength={8} hint={t("bioEditor.emojiHint")} />
             <UrlField label={t("bioEditor.thumbnail")} value={block.thumbnailUrl ?? ""} onChange={(thumbnailUrl) => set({ thumbnailUrl })} error={errors.thumbnailUrl} />
           </div>

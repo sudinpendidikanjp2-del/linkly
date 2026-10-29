@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { LoaderCircleIcon, LogOutIcon, MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
+import { CheckIcon, DownloadIcon, LoaderCircleIcon, LogOutIcon, MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -16,6 +16,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageHeader } from "@/components/page-header";
 import { ApiError, api } from "@/lib/api";
 import { useAuth, useUser } from "@/providers/auth";
+import { useInstall } from "@/pwa/use-install";
 import { ACCENTS, useTheme, type Accent, type ThemeMode } from "@/providers/theme";
 import { useI18n, type Lang } from "@/i18n";
 import { passwordChangeSchema, profileSchema, type PasswordChangeInput, type ProfileInput } from "@/shared/schemas";
@@ -145,6 +146,36 @@ function AppearanceCard() {
             <ToggleGroupItem value="en">English</ToggleGroupItem>
           </ToggleGroup>
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AppCard() {
+  const { t } = useI18n();
+  const { canInstall, installed, needsManualInstall, install } = useInstall();
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t("pwa.appTitle")}</CardTitle>
+        <CardDescription>{t("pwa.appDesc")}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {installed ? (
+          <p className="flex items-center gap-2 text-sm font-medium text-success-text">
+            <CheckIcon className="size-4" /> {t("pwa.installed")}
+          </p>
+        ) : canInstall ? (
+          <Button
+            onClick={async () => {
+              if (await install()) toast.success(t("pwa.installOk"));
+            }}
+          >
+            <DownloadIcon /> {t("pwa.install")}
+          </Button>
+        ) : (
+          <p className="text-sm text-muted-foreground">{needsManualInstall ? t("pwa.iosHint") : t("pwa.browserHint")}</p>
+        )}
       </CardContent>
     </Card>
   );
@@ -343,6 +374,7 @@ export default function SettingsPage() {
       <PageHeader title={t("settings.title")} description={t("settings.subtitle")} />
       <ProfileCard />
       <AppearanceCard />
+      <AppCard />
       <SecurityCard />
       {user.role === "ADMIN" ? <AdminCard /> : null}
       <DangerCard />

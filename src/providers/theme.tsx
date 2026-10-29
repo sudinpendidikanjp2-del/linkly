@@ -50,6 +50,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const root = document.documentElement;
     root.classList.toggle("dark", resolved === "dark");
     root.style.colorScheme = resolved;
+    // Keeps the browser / installed-app title bar in step with the page background.
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", resolved === "dark" ? "#0e0f12" : "#f7f7f5");
   }, [resolved]);
 
   useEffect(() => {

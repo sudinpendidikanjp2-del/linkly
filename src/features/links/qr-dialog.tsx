@@ -63,7 +63,7 @@ export function QrDialog({ link, open, onOpenChange }: { link: LinkDTO | null; o
           <DialogDescription>{t("qr.desc")}</DialogDescription>
         </DialogHeader>
         {link ? (
-          <div className="grid gap-6 sm:grid-cols-[220px_1fr]">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-[220px_1fr]">
             <div className="flex flex-col items-center gap-3">
               <div ref={svgBox} className="rounded-xl border p-3" style={{ background: bg }} role="img" aria-label={t("qr.preview", { url: value })}>
                 <QRCodeSVG value={value} size={196} fgColor={fg} bgColor={bg} level={effectiveLevel} marginSize={0} imageSettings={imageSettings ? { ...imageSettings, width: 40, height: 40 } : undefined} />

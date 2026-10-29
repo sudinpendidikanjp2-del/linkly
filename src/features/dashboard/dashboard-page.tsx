@@ -33,7 +33,7 @@ function MiniStat({ label, value, hint }: { label: string; value: string; hint?:
 
 function DashboardSkeleton() {
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]" aria-busy="true">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_260px]" aria-busy="true">
       <Skeleton className="h-[380px] rounded-xl" />
       <div className="grid gap-4">
         <Skeleton className="h-24 rounded-xl" />
@@ -56,7 +56,7 @@ export default function DashboardPage() {
   const firstName = (user.name ?? user.email.split("@")[0]).split(" ")[0];
 
   return (
-    <div className="grid gap-8">
+    <div className="grid min-w-0 grid-cols-1 gap-8">
       <PageHeader title={t("dashboard.greeting", { name: firstName })} description={t("dashboard.subtitle")} actions={<RangeToggle value={range} onChange={setRange} />} />
 
       <QuickShorten />
@@ -78,7 +78,7 @@ export default function DashboardPage() {
         </Card>
       ) : data ? (
         <>
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
             <Card>
               <CardHeader className="sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-1">
@@ -106,7 +106,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
             <Card>
               <CardHeader>
                 <CardTitle>{t("dashboard.topLinks")}</CardTitle>

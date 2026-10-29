@@ -38,3 +38,11 @@ Akun pertama otomatis menjadi administrator. Produksi: `npm run build && npm sta
 - Pindaian QR memakai `?qr=1` dan dihitung terpisah.
 - Lokasi diambil dari header edge (`cf-ipcountry`, `x-vercel-ip-country`, dll.), tanpa layanan GeoIP pihak ketiga.
 - `npm run lint` (tsc) dan `npm run check:contrast` (WCAG AA untuk tema bio).
+
+## Aplikasi (PWA)
+
+Linkly bisa dipasang seperti aplikasi native di Android, iOS, dan desktop: `manifest.webmanifest`, service worker (`public/sw.js`), ikon maskable, tampilan standalone, bilah navigasi bawah di ponsel, dan area aman layar berlekuk. Aplikasi tetap terbuka saat offline (cangkang aplikasi di-cache; data, tautan pendek, dan halaman bio selalu dari jaringan).
+
+- Android Chrome: menu atau tombol **Pasang aplikasi** di Pengaturan. Berbagi URL dari aplikasi lain ke Linkly membuka dialog tautan baru (Web Share Target).
+- Pintasan ikon: Tautan baru, Semua tautan, Halaman bio.
+- Service worker hanya aktif pada build produksi dan lewat HTTPS (atau localhost).

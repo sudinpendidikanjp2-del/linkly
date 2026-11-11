@@ -48,7 +48,22 @@ export async function createApp() {
 
   if (env.isProd) {
     const dist = path.join(process.cwd(), "dist");
-    app.use(express.static(dist, { index: false, maxAge: "1h" }));
+    app.use(
+      express.static(dist, {
+        index: false,
+        maxAge: "1h",
+        setHeaders: (res, file) => {
+          const name = path.basename(file);
+          // The worker and manifest must always be revalidated so updates reach installed apps promptly.
+          if (name === "sw.js" || name === "manifest.webmanifest" || name === "offline.html") {
+            res.setHeader("Cache-Control", "no-cache");
+            if (name === "sw.js") res.setHeader("Service-Worker-Allowed", "/");
+          } else if (file.includes(`${path.sep}assets${path.sep}`)) {
+            res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+          }
+        },
+      }),
+    );
     app.get("*", (_req, res) => res.sendFile(path.join(dist, "index.html")));
   } else {
     const { createServer } = await import("vite");

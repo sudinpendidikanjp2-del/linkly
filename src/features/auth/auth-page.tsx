@@ -188,7 +188,10 @@ export default function AuthPage() {
   const [tab, setTab] = useState<"login" | "register">("login");
   const [googlePending, setGooglePending] = useState(false);
 
-  if (!loading && user) return <Navigate to="/" replace />;
+  // Only same-site paths are honoured, so a crafted ?next= cannot send people to another site.
+  const requested = params.get("next");
+  const next = requested && requested.startsWith("/") && !requested.startsWith("//") ? requested : "/";
+  if (!loading && user) return <Navigate to={next} replace />;
 
   const oauthError = params.get("error");
 

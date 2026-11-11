@@ -42,3 +42,12 @@ export function toLocalInput(iso: string | null | undefined): string {
 export function fromLocalInput(value: string): string | null {
   return value ? new Date(value).toISOString() : null;
 }
+
+/** Pulls the first web address out of text shared from another app (Android sends it in `text`). */
+export function extractSharedUrl(...values: (string | null | undefined)[]): string | undefined {
+  for (const value of values) {
+    const match = value?.match(/https?:\/\/[^\s<>"]+/i);
+    if (match) return match[0];
+  }
+  return undefined;
+}

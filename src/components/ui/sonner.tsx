@@ -8,6 +8,7 @@ function Toaster(props: ToasterProps) {
       theme={resolved}
       position="bottom-right"
       closeButton
+      mobileOffset={{ bottom: "calc(84px + env(safe-area-inset-bottom))", left: 16, right: 16 }}
       className="toaster group"
       toastOptions={{
         classNames: {

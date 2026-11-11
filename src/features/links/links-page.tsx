@@ -17,7 +17,7 @@ import { EmptyState, ErrorState } from "@/components/states";
 import { StatusBadge } from "@/components/status-badge";
 import { ApiError } from "@/lib/api";
 import { formatDate } from "@/lib/format";
-import { hostOf } from "@/lib/links";
+import { extractSharedUrl, hostOf } from "@/lib/links";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useI18n } from "@/i18n";
 import { PAGE_SIZES } from "@/shared/constants";
@@ -81,7 +81,18 @@ function RowSkeleton() {
 export default function LinksPage() {
   const { t, te, dateLocale, numberFormat } = useI18n();
   const actions = useLinkActions();
+  const [shareParams, setShareParams] = useSearchParams();
   const { filters, sortKey, update, reset, active } = useFilters();
+
+  // Opened from the app shortcut (?new=1) or the Android share sheet (?url=...&text=...): start a new link right away.
+  useEffect(() => {
+    if (!shareParams.has("new") && !shareParams.has("url") && !shareParams.has("text")) return;
+    actions.create(extractSharedUrl(shareParams.get("url"), shareParams.get("text")));
+    const next = new URLSearchParams(shareParams);
+    ["new", "url", "text", "title"].forEach((key) => next.delete(key));
+    setShareParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const collections = useCollections();
   const bulk = useBulkLinks();
 

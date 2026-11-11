@@ -147,7 +147,7 @@ export function FloatersEditor({ floaters, onChange, links, errorsAt }: Props) {
                       ) : null}
                       {floater.kind !== "image" ? <ColorField label={t("bioEditor.floatColor")} value={floater.color} fallback="#2dd4bf" onChange={(color) => replace(index, { color: color ?? "#2dd4bf" })} /> : null}
                       {floater.kind === "button" ? (
-                        <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                           <TextField label={t("bioEditor.floatLabel")} value={floater.label ?? ""} onChange={(label) => replace(index, { label })} maxLength={40} />
                           <TextField label={t("bioEditor.emoji")} value={floater.emoji ?? ""} onChange={(emoji) => replace(index, { emoji })} maxLength={8} />
                         </div>

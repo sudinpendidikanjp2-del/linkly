@@ -91,7 +91,7 @@ export function DesignEditor({ values, design, onDesign, onField }: Props) {
               </button>
             ) : null}
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <ColorField label={t("bioEditor.colorBg")} value={colors.bg ?? undefined} fallback={resolved.bg} onChange={(bg) => setColors({ bg })} />
             <ColorField label={t("bioEditor.colorFg")} value={colors.fg ?? undefined} fallback={resolved.fg} onChange={(fg) => setColors({ fg })} />
             <ColorField label={t("bioEditor.colorSurface")} value={colors.surface ?? undefined} fallback={resolved.surface} onChange={(surface) => setColors({ surface })} />
@@ -119,7 +119,7 @@ export function DesignEditor({ values, design, onDesign, onField }: Props) {
         />
         {background.type === "gradient" ? (
           <>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <ColorField label={t("bioEditor.gradFrom")} value={background.from} fallback={background.from} onChange={(from) => setBackground({ from: from ?? "#0f766e" })} />
               <ColorField label={t("bioEditor.gradTo")} value={background.to} fallback={background.to} onChange={(to) => setBackground({ to: to ?? "#17181c" })} />
             </div>

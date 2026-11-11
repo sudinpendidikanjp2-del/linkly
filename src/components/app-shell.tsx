@@ -1,24 +1,71 @@
-import { useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router";
-import { ChartNoAxesColumnIcon, CheckIcon, FolderClosedIcon, LanguagesIcon, Link2Icon, LogOutIcon, MenuIcon, MonitorIcon, MoonIcon, PlusIcon, SettingsIcon, SquareUserIcon, SunIcon } from "lucide-react";
+import { ChartNoAxesColumnIcon, CheckIcon, FolderClosedIcon, LanguagesIcon, Link2Icon, LogOutIcon, MonitorIcon, MoonIcon, PlusIcon, SettingsIcon, SquareUserIcon, SunIcon, WifiOffIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Logo } from "@/components/logo";
 import { LinkActionsProvider, useLinkActions } from "@/features/links/link-actions";
 import { useAuth, useUser } from "@/providers/auth";
 import { useTheme, type ThemeMode } from "@/providers/theme";
 import { useI18n } from "@/i18n";
+import { useOnline } from "@/pwa/use-online";
 import { cn } from "@/lib/utils";
 
 const NAV = [
   { to: "/", key: "nav.dashboard", icon: ChartNoAxesColumnIcon, end: true },
   { to: "/links", key: "nav.links", icon: Link2Icon },
   { to: "/collections", key: "nav.collections", icon: FolderClosedIcon },
-  { to: "/bio", key: "nav.bio", icon: SquareUserIcon },
+  { to: "/bio", key: "nav.bio", short: "nav.bioShort", icon: SquareUserIcon },
   { to: "/settings", key: "nav.settings", icon: SettingsIcon },
 ] as const;
+
+function BottomNav() {
+  const { t } = useI18n();
+  return (
+    <nav aria-label={t("nav.main")} className="fixed inset-x-0 bottom-0 z-40 border-t bg-card pb-[env(safe-area-inset-bottom)] lg:hidden">
+      <ul className="mx-auto grid max-w-lg grid-cols-5">
+        {NAV.map((item) => {
+          const Icon = item.icon;
+          const label = "short" in item ? t(item.short) : t(item.key);
+          return (
+            <li key={item.to}>
+              <NavLink
+                to={item.to}
+                end={"end" in item}
+                className={({ isActive }) =>
+                  cn(
+                    "press flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 text-[11px] font-medium outline-none select-none focus-visible:bg-accent",
+                    isActive ? "text-brand-text" : "text-muted-foreground",
+                  )
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <span className={cn("grid h-7 w-12 place-items-center rounded-full transition-colors duration-200", isActive && "bg-brand-soft")}>
+                      <Icon className="size-[20px]" />
+                    </span>
+                    <span className="max-w-full truncate">{label}</span>
+                  </>
+                )}
+              </NavLink>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}
+
+function OfflineBanner() {
+  const { t } = useI18n();
+  const online = useOnline();
+  if (online) return null;
+  return (
+    <div role="status" className="flex items-center justify-center gap-2 bg-warning-soft px-4 py-2 text-[13px] font-medium text-warning-text">
+      <WifiOffIcon className="size-4 shrink-0" /> {t("pwa.offline")}
+    </div>
+  );
+}
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useI18n();
@@ -99,7 +146,6 @@ function UserMenu() {
 function ShellFrame() {
   const { t } = useI18n();
   const actions = useLinkActions();
-  const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
 
   return (
@@ -122,10 +168,8 @@ function ShellFrame() {
       </aside>
 
       <div className="flex min-w-0 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/85 px-3 backdrop-blur-md lg:hidden">
-          <Button variant="ghost" size="icon" aria-label={t("nav.openMenu")} onClick={() => setMenuOpen(true)}>
-            <MenuIcon />
-          </Button>
+        <OfflineBanner />
+        <header className="sticky top-0 z-30 flex min-h-14 items-center gap-2 border-b bg-background/85 px-4 pt-[env(safe-area-inset-top)] backdrop-blur-md lg:hidden">
           <Link to="/" className="rounded-lg outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30" aria-label="Linkly">
             <Logo className="text-base" />
           </Link>
@@ -134,25 +178,11 @@ function ShellFrame() {
           </Button>
         </header>
 
-        <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-          <SheetContent side="left" className="p-4">
-            <SheetHeader className="p-0 pr-10">
-              <SheetTitle>
-                <Logo />
-              </SheetTitle>
-              <SheetDescription className="sr-only">{t("nav.main")}</SheetDescription>
-            </SheetHeader>
-            <NavLinks onNavigate={() => setMenuOpen(false)} />
-            <div className="mt-auto border-t pt-3">
-              <UserMenu />
-            </div>
-          </SheetContent>
-        </Sheet>
-
-        <main id="main" tabIndex={-1} key={location.pathname} className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 outline-none animate-in fade-in-0 slide-in-from-bottom-1 duration-300 sm:px-6 lg:px-10 lg:py-10">
+        <main id="main" tabIndex={-1} key={location.pathname} className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 pb-[calc(5.5rem+env(safe-area-inset-bottom))] outline-none lg:pb-10 animate-in fade-in-0 slide-in-from-bottom-1 duration-300 sm:px-6 lg:px-10 lg:py-10">
           <Outlet />
         </main>
       </div>
+      <BottomNav />
     </div>
   );
 }

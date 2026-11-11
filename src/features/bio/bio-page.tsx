@@ -168,7 +168,7 @@ function ProfileCard({ form, bio }: { form: BioForm; bio: BioDTO }) {
           <CardTitle>{t("bio.socials")}</CardTitle>
           <CardDescription>{t("bio.socialHint")}</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
+        <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {SOCIAL_KEYS.map((key) => (
             <TextField key={key} label={SOCIAL_LABEL[key]} value={socials[key] ?? ""} placeholder="@username" maxLength={200} onChange={(value) => form.setValue("socials", { ...socials, [key]: value }, { shouldDirty: true })} />
           ))}

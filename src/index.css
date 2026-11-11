@@ -179,3 +179,33 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Native-app feel: safe areas, no tap flash, no double-tap zoom delay, no accidental horizontal swipe navigation. */
+@layer base {
+  /* Grid tracks default to `auto`, which lets one long unbreakable string widen the whole page on phones.
+     A zero minimum keeps every single-column grid inside its parent; explicit grid-cols-* utilities still win. */
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  html {
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-x: none;
+  }
+  body {
+    touch-action: manipulation;
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+  button,
+  [role="tab"],
+  [role="menuitem"],
+  nav a {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  @media (display-mode: standalone) {
+    body {
+      overscroll-behavior-y: none;
+    }
+  }
+}

@@ -46,3 +46,28 @@ Linkly bisa dipasang seperti aplikasi native di Android, iOS, dan desktop: `mani
 - Android Chrome: menu atau tombol **Pasang aplikasi** di Pengaturan. Berbagi URL dari aplikasi lain ke Linkly membuka dialog tautan baru (Web Share Target).
 - Pintasan ikon: Tautan baru, Semua tautan, Halaman bio.
 - Service worker hanya aktif pada build produksi dan lewat HTTPS (atau localhost).
+
+## Docker untuk linux/arm64/v8
+
+`Dockerfile` mendukung multi-arsitektur. Stage `builder` selalu berjalan di mesin build (hasilnya JavaScript, bebas arsitektur), sedangkan stage `runner` dibangun untuk platform target, termasuk mesin Prisma arm64.
+
+```bash
+npm run docker:arm64                          # arsip ./out/linkly-arm64.tar
+scripts/docker-build.sh --load                # muat ke Docker lokal
+scripts/docker-build.sh --push ghcr.io/akun/linkly:1.0.0
+DOCKER_DEFAULT_PLATFORM=linux/arm64/v8 docker compose up --build
+```
+
+Di mesin x86, pasang emulasi sekali: `docker run --privileged --rm tonistiigi/binfmt --install arm64`. Di mesin arm64 (Apple Silicon, Graviton, Raspberry Pi 4/5) tidak perlu emulasi. Pindahkan arsip ke target dengan `docker load -i linkly-arm64.tar`.
+
+## Rilis image otomatis (GitHub Actions)
+
+`.github/workflows/docker-publish.yml` berjalan setiap push ke `main` (dan tag `v*.*.*`, atau manual lewat tab Actions). Alurnya: typecheck dan build, lalu membangun image multi-arsitektur **linux/amd64** dan **linux/arm64** dan mengirimnya ke GitHub Container Registry, lengkap dengan provenance dan SBOM.
+
+```bash
+docker pull ghcr.io/<pemilik>/linkly:latest     # platform dipilih otomatis oleh Docker
+docker pull ghcr.io/<pemilik>/linkly:sha-abc1234
+docker pull ghcr.io/<pemilik>/linkly:1.2.3      # hanya dari tag v1.2.3
+```
+
+Tag `v1.2.3` juga membuat GitHub Release. Paket pertama kali terbit dengan visibilitas privat; ubah di Packages > Package settings jika ingin publik. armv7 (32-bit) tidak disediakan karena Prisma tidak punya engine untuk arsitektur itu.

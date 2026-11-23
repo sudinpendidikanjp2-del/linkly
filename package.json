@@ -10,7 +10,8 @@
     "lint": "tsc --noEmit",
     "check:contrast": "tsx scripts/check-contrast.ts",
     "db:migrate": "prisma migrate dev",
-    "db:deploy": "prisma migrate deploy"
+    "db:deploy": "prisma migrate deploy",
+    "docker:arm64": "scripts/docker-build.sh"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

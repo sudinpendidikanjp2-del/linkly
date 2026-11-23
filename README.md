@@ -66,7 +66,7 @@ Di mesin x86, pasang emulasi sekali: `docker run --privileged --rm tonistiigi/bi
 
 ```bash
 docker pull ghcr.io/<pemilik>/linkly:latest     # platform dipilih otomatis oleh Docker
-docker pull ghcr.io/<pemilik>/linkly:sha-abc1234
+docker pull ghcr.io/<pemilik>/linkly:sha-abc1234   # atau :main, :build-42
 docker pull ghcr.io/<pemilik>/linkly:1.2.3      # hanya dari tag v1.2.3
 ```
 

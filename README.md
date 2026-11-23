@@ -62,12 +62,19 @@ Di mesin x86, pasang emulasi sekali: `docker run --privileged --rm tonistiigi/bi
 
 ## Rilis image otomatis (GitHub Actions)
 
-`.github/workflows/docker-publish.yml` berjalan setiap push ke `main` (dan tag `v*.*.*`, atau manual lewat tab Actions). Alurnya: typecheck dan build, lalu membangun image multi-arsitektur **linux/amd64** dan **linux/arm64** dan mengirimnya ke GitHub Container Registry, lengkap dengan provenance dan SBOM.
+`.github/workflows/docker-publish.yml` berjalan setiap push ke `main`. Alurnya: typecheck dan build, hitung versi berikutnya, bangun image multi-arsitektur **linux/amd64** dan **linux/arm64**, kirim ke GitHub Container Registry (dengan provenance dan SBOM), lalu buat tag git dan GitHub Release.
+
+- Versi patch naik otomatis di setiap push ke `main`: `1.0.0` lalu `1.0.1`, `1.0.2`, dan seterusnya. Rilis pertama memakai versi di `package.json`.
+- Untuk menaikkan minor atau mayor: Actions > Publish Docker image > Run workflow, lalu pilih `minor` atau `major`.
+- Mendorong tag sendiri (`git tag v2.0.0 && git push origin v2.0.0`) menerbitkan persis versi itu.
+- Tag dan rilis dibuat hanya setelah image berhasil dikirim, jadi build yang gagal tidak memakai nomor versi.
 
 ```bash
-docker pull ghcr.io/<pemilik>/linkly:latest     # platform dipilih otomatis oleh Docker
-docker pull ghcr.io/<pemilik>/linkly:sha-abc1234   # atau :main, :build-42
-docker pull ghcr.io/<pemilik>/linkly:1.2.3      # hanya dari tag v1.2.3
+docker pull ghcr.io/<pemilik>/linkly:latest        # platform dipilih otomatis oleh Docker
+docker pull ghcr.io/<pemilik>/linkly:1.0.1         # versi persis
+docker pull ghcr.io/<pemilik>/linkly:1.0           # patch terbaru dari 1.0.x
+docker pull ghcr.io/<pemilik>/linkly:1             # minor terbaru dari 1.x (tidak untuk 0.x)
+docker pull ghcr.io/<pemilik>/linkly:sha-abc1234   # commit tertentu
 ```
 
-Tag `v1.2.3` juga membuat GitHub Release. Paket pertama kali terbit dengan visibilitas privat; ubah di Packages > Package settings jika ingin publik. armv7 (32-bit) tidak disediakan karena Prisma tidak punya engine untuk arsitektur itu.
+Paket pertama kali terbit dengan visibilitas privat; ubah di Packages > Package settings jika ingin publik. armv7 (32-bit) tidak disediakan karena Prisma tidak punya engine untuk arsitektur itu.

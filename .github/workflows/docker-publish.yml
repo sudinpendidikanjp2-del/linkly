@@ -1,16 +1,24 @@
 name: Publish Docker image
 
-# Every push to main publishes a production image to GitHub Container Registry (ghcr.io).
-# Pushing a version tag (v1.2.3) also publishes semver tags and creates a GitHub Release.
+# Every push to main publishes a production image to GitHub Container Registry (ghcr.io) and cuts a release:
+# the patch version is bumped automatically (1.0.0 -> 1.0.1 -> 1.0.2 ...), tagged in git, and published as a GitHub Release.
+# Run the workflow manually to bump minor or major instead. Pushing a tag such as v2.0.0 yourself publishes exactly that version.
 on:
   push:
     branches: [main]
     tags: ["v*.*.*"]
   workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump for this release (ignored when a tag is pushed)
+        type: choice
+        options: [patch, minor, major]
+        default: patch
 
+# Releases are numbered in order, so runs queue up instead of cancelling each other.
 concurrency:
-  group: docker-publish-${{ github.ref }}
-  cancel-in-progress: true
+  group: docker-publish
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
@@ -36,16 +44,67 @@ jobs:
       - run: npm run check:contrast
       - run: npm run build
 
+  version:
+    name: Next version
+    needs: check
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.next.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Work out the version
+        id: next
+        env:
+          BUMP: ${{ inputs.bump || 'patch' }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            last="$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1 || true)"
+            if [ -z "$last" ]; then
+              # First release: use the version in package.json as is.
+              version="$(node -p "require('./package.json').version")"
+            else
+              IFS=. read -r major minor patch <<< "${last#v}"
+              case "$BUMP" in
+                major) version="$((major + 1)).0.0" ;;
+                minor) version="${major}.$((minor + 1)).0" ;;
+                *)     version="${major}.${minor}.$((patch + 1))" ;;
+              esac
+            fi
+          fi
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Refusing to publish unexpected version: $version" >&2
+            exit 1
+          fi
+          if [[ "$GITHUB_REF" != refs/tags/v* ]] && git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+            echo "Tag v$version already exists" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Releasing v$version" >> "$GITHUB_STEP_SUMMARY"
+
   publish:
     name: Build and push (amd64, arm64)
-    needs: check
+    needs: version
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
-      contents: write # create the GitHub Release on version tags
+      contents: write # create the tag and GitHub Release
       packages: write # push to ghcr.io
       id-token: write # keyless build provenance
       attestations: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -70,17 +129,16 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
+            type=semver,pattern={{version}},value=v${{ env.VERSION }}
+            type=semver,pattern={{major}}.{{minor}},value=v${{ env.VERSION }}
+            type=semver,pattern={{major}},value=v${{ env.VERSION }},enable=${{ !startsWith(env.VERSION, '0.') }}
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=branch
             type=sha,prefix=sha-,format=short
-            type=raw,value=build-${{ github.run_number }},enable={{is_default_branch}}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
           labels: |
             org.opencontainers.image.title=Linkly
             org.opencontainers.image.description=Link shortener with QR codes, analytics and bio pages
-            org.opencontainers.image.licenses=UNLICENSED
+            org.opencontainers.image.version=${{ env.VERSION }}
 
       - name: Build and push multi-arch image
         id: build
@@ -102,24 +160,29 @@ jobs:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.build.outputs.digest }}
           # Keep the attestation in GitHub only. Pushing it to the registry adds a stray "sha256-<digest>" tag that
-          # becomes the package's newest "version" and hides latest / semver tags on the package page.
+          # becomes the package's newest "version" and hides the real tags on the package page.
           push-to-registry: false
 
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+      # The tag is created only after the image is pushed, so a failed build never uses up a version number.
+      - name: Create tag and GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --title "$GITHUB_REF_NAME" \
-            --generate-notes \
-            --notes "Docker image: \`${REGISTRY}/${IMAGE_NAME}:${GITHUB_REF_NAME#v}\` (linux/amd64, linux/arm64)"
+          if gh release view "v${VERSION}" >/dev/null 2>&1; then
+            echo "Release v${VERSION} already exists"
+          else
+            gh release create "v${VERSION}" \
+              --target "$GITHUB_SHA" \
+              --title "v${VERSION}" \
+              --generate-notes \
+              --notes "Docker image: \`${REGISTRY}/${IMAGE_NAME}:${VERSION}\` (linux/amd64, linux/arm64)"
+          fi
 
       - name: Summary
         run: |
           {
-            echo "### Published"
-            echo "Image: \`${REGISTRY}/${IMAGE_NAME}\`"
+            echo "### Published v${VERSION}"
+            echo "Image: \`${REGISTRY}/${IMAGE_NAME}:${VERSION}\`"
             echo "Digest: \`${{ steps.build.outputs.digest }}\`"
             echo "Platforms: \`${PLATFORMS}\`"
             echo
